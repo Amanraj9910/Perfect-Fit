@@ -107,9 +107,16 @@ git clone https://github.com/YOUR_ORG/perfect-fit.git
 cd perfect-fit
 ```
 
-2. **Install Dependencies**
+2. **Automated Setup (Windows)**
+Run the setup script to install Node.js and Python dependencies:
+```powershell
+.\setup_project.ps1
+```
+
+3. **Start Local Infrastructure**
+Ensure Docker Desktop is running, then start the database and cache:
 ```bash
-npm install
+docker compose up -d
 ```
 
 3. **Configure Environment**
