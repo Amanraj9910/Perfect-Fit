@@ -38,10 +38,10 @@ Transform hiring from "resume filtering" to "skill & potential verification" thr
 
 ```
 perfect-fit/
-├── apps/
+├── frontend/
 │   ├── candidate-portal/    # Candidate web app (Next.js)
 │   └── recruiter-portal/    # Recruiter dashboard (Next.js)
-├── services/
+├── backend/
 │   ├── auth/                # Authentication service (NestJS)
 │   ├── user/                # User management (NestJS)
 │   ├── job/                 # Job posting service (NestJS)

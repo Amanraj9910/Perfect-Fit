@@ -2,15 +2,15 @@
   "name": "perfect-fit",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "services/*",
+    "frontend/*",
+    "backend/*",
     "packages/*"
   ],
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "test": "turbo run test",
+    "build:all": "turbo run build",
+    "dev:all": "turbo run dev",
+    "lint:all": "turbo run lint",
+    "test:all": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {

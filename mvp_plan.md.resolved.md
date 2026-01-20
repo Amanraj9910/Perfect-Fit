@@ -13,12 +13,12 @@ This is a **construction blueprint**, not a feature list.
 ### 0.1 Repository & Project Setup
 - [ ] **Decide Monorepo Strategy**: Initialize Turborepo with pnpm.
 - [ ] **Folder Structure**:
-    - `/apps/candidate-portal` (Next.js)
-    - `/apps/recruiter-portal` (Next.js)
-    - `/services/auth-service` (NestJS)
-    - `/services/user-service` (NestJS)
-    - `/services/job-service` (NestJS)
-    - `/services/analysis-service` (Python/FastAPI)
+    - `/frontend/candidate-portal` (Next.js)
+    - `/frontend/recruiter-portal` (Next.js)
+    - `/backend/auth-service` (NestJS)
+    - `/backend/user-service` (NestJS)
+    - `/backend/job-service` (NestJS)
+    - `/backend/analysis-service` (Python/FastAPI)
     - `/packages/ui` (Shared components)
     - `/packages/content-types` (Shared types)
 - [ ] **Code Standards**: Setup ESLint, Prettier, and Husky pre-commit hooks.

@@ -297,15 +297,15 @@ npm install typescript @types/node --save-dev
 ### Step 3: Create Directory Structure
 ```bash
 # Create all directories
-mkdir -p apps/candidate-portal
-mkdir -p apps/recruiter-portal
-mkdir -p services/gateway
-mkdir -p services/auth
-mkdir -p services/user
-mkdir -p services/job
-mkdir -p services/notification
-mkdir -p services/analysis
-mkdir -p services/matching
+mkdir -p frontend/candidate-portal
+mkdir -p frontend/recruiter-portal
+mkdir -p backend/gateway
+mkdir -p backend/auth
+mkdir -p backend/user
+mkdir -p backend/job
+mkdir -p backend/notification
+mkdir -p backend/analysis
+mkdir -p backend/matching
 mkdir -p packages/ui-components
 mkdir -p packages/shared-types
 mkdir -p packages/config
@@ -460,8 +460,8 @@ EOF
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "services/*",
+    "frontend/*",
+    "backend/*",
     "packages/*"
   ],
   "scripts": {
