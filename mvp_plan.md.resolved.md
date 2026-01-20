@@ -1,638 +1,478 @@
-# Perfect-Fit MVP - Implementation Plan
+# Perfect Fit – FULL SEQUENTIAL BUILD ORDER (ZERO‑SKIP, MODULE‑BY‑MODULE)
 
-**Focused MVP based on approved architectural decisions**
+**Purpose**: This document answers ONLY one question: **“If I start today from scratch, what EXACTLY do I build first, finish completely, then move to the next — without skipping anything?”**
 
----
-
-## 🎯 MVP Scope
-
-### What We're Building
-
-**Phase 1 MVP Features:**
-1. ✅ User authentication (candidates + recruiters)
-2. ✅ Candidate profile creation and management
-3. ✅ Recruiter profile creation and management
-4. ✅ Job posting by recruiters
-5. ✅ Resume analysis (AI-powered)
-6. ✅ GitHub profile and code analysis
-7. ✅ LinkedIn profile analysis
-8. ✅ Basic candidate-job matching
-9. ✅ Candidate scorecard generation
-10. ✅ Simple recruiter dashboard
-
-### What We're Deferring
-- ❌ Code execution assessments (future)
-- ❌ AI interview companion (future)
-- ❌ Video meetings (future)
-- ❌ Advanced analytics (future)
-- ❌ Mobile apps (future)
+This is a **construction blueprint**, not a feature list.
 
 ---
 
-## ☁️ Approved Tech Stack
+## 🧱 STAGE 0: PROJECT & INFRA FOUNDATION (MANDATORY FIRST)
 
-### Cloud Infrastructure
+**Goal**: Establish the bedrock. No feature code until the environment is healthy.
 
-**Cloud Platform: Microsoft Azure (100%)**
-- App Services / Container Apps
-- Azure SQL Database (PostgreSQL)
-- Azure Cosmos DB (MongoDB API)
-- Azure Cache for Redis
-- Azure Blob Storage
-- Azure Container Registry
-- Azure OpenAI Service (GPT-4, GPT-3.5, Embeddings)
-- Azure AI Services (Document Intelligence, Language)
-- Azure AI Search (Vector + Full-text search)
-- Azure DevOps / GitHub Actions
+### 0.1 Repository & Project Setup
+- [ ] **Decide Monorepo Strategy**: Initialize Turborepo with pnpm.
+- [ ] **Folder Structure**:
+    - `/apps/candidate-portal` (Next.js)
+    - `/apps/recruiter-portal` (Next.js)
+    - `/services/auth-service` (NestJS)
+    - `/services/user-service` (NestJS)
+    - `/services/job-service` (NestJS)
+    - `/services/analysis-service` (Python/FastAPI)
+    - `/packages/ui` (Shared components)
+    - `/packages/content-types` (Shared types)
+- [ ] **Code Standards**: Setup ESLint, Prettier, and Husky pre-commit hooks.
+- [ ] **Env Var Strategy**: Create `.env.example` templates and setup `dotenv`.
 
-**Benefits of Azure-Only:**
-- Single cloud provider = simpler management
-- Better integration between services
-- Unified billing and monitoring
-- No multi-cloud complexity
-- Azure OpenAI offers GPT-4, GPT-3.5, Embeddings
+### 0.2 Backend Base (NestJS & Python)
+- [ ] **NestJS Gateway/Service**: Initialize basic NestJS app structure.
+- [ ] **Global Error Handler**: Implement `AllExceptionsFilter` in NestJS.
+- [ ] **Request Validation**: Setup `ValidationPipe` with `class-validator` and `class-transformer`.
+- [ ] **Logging**: Configure Winston or Pino interaction with consistent log formatting (JSON).
+- [ ] **Python Setup**: Initialize FastAPI project with Poetry/Pipenv.
 
----
+### 0.3 Database & Infra Connections
+- [ ] **PostgreSQL**: Provision Azure SQL, run init script, and verify connection from NestJS (Prisma).
+- [ ] **Redis**: Provision Azure Cache for Redis, verify connection (ioredis).
+- [ ] **Azure Blob**: Provision Storage Account, create `resumes` and `images` containers, check access keys.
+- [ ] **Migrations**: Setup Prisma Migrate flow and run initial `init` migration.
 
-### Core Tech Stack
-
-#### Frontend Applications
-
-**Candidate Portal & Recruiter Portal**
-- **Framework:** Next.js 14+ (TypeScript)
-- **Styling:** TailwindCSS + shadcn/ui
-- **State:** Zustand + TanStack Query
-- **Forms:** React Hook Form + Zod
-- **Tables:** TanStack Table (recruiter dashboard)
-- **Charts:** Recharts
-- **HTTP:** Axios
-- **Testing:** Vitest + React Testing Library
-
-#### Backend Services
-
-**Hybrid Monorepo Structure with NestJS**
-
-**Services to Build:**
-1. Auth Service (Azure AD + JWT)
-2. User Service (profiles)
-3. Job Service (job postings)
-4. Analysis Service (resume/GitHub/LinkedIn)
-5. Matching Service (candidate-job matching)
-6. Notification Service (email alerts)
-
-**Tech Stack:**
-- **Framework:** NestJS (TypeScript)
-- **Auth:** Azure AD B2C + custom JWT
-- **Database ORM:** Prisma (PostgreSQL) + Mongoose (MongoDB)
-- **Validation:** class-validator
-- **API Docs:** Swagger/OpenAPI
-- **Queue:** BullMQ + Redis
-- **Logging:** Winston
-- **Testing:** Jest + Supertest
-
-#### AI/ML Services (Python)
-
-**Analysis Services:**
-- Resume Parser & Analyzer
-- GitHub Code Analyzer
-- LinkedIn Profile Analyzer
-- Candidate Scoring Engine
-
-**Tech Stack:**
-- **Framework:** FastAPI (Python)
-- **AI/ML:**
-  - Azure OpenAI Service (GPT-4, GPT-3.5, text-embedding-ada-002)
-  - Azure AI Document Intelligence (Resume parsing)
-  - Azure AI Language (NER, sentiment analysis)
-  - LangChain for orchestration (Azure OpenAI integration)
-- **Resume Parsing:** Azure Document Intelligence + PyMuPDF
-- **GitHub:** PyGithub
-- **LinkedIn:** python-linkedin (or scraping with consent)
-- **Vector DB:** Azure AI Search (built-in vectors)
-- **Task Queue:** Celery + Redis
-- **Testing:** Pytest
+✅ **STOP CONDITION**: Backend boots without errors, simple `/health` endpoint returns 200 OK, DB/Redis/Blob are reachable, and logs are visible.
 
 ---
 
-## 🗄️ Database Architecture
+## 🔐 STAGE 1: AUTHENTICATION & USER IDENTITY (MODULE 1)
 
-### Azure SQL Database (PostgreSQL)
-**Tables:**
-- `users` (candidates + recruiters)
-- `candidate_profiles`
-- `recruiter_profiles`
-- `companies`
-- `jobs`
-- `applications`
-- `auth_tokens`
-- `audit_logs`
+**Goal**: Secure identity management. **Everything else depends on this.**
 
-### Azure Cosmos DB (MongoDB API)
-**Collections:**
-- `resume_analyses`
-- `github_analyses`
-- `linkedin_analyses`
-- `candidate_scorecards`
-- `activity_logs`
+### 1.1 User Core Schema
+- [ ] **Schema Definition**: Create `User` table in Prisma.
+    - Fields: `id`, `email`, `password_hash`, `role` (ENUM: Candidate, Recruiter, Admin), `is_verified`, `created_at`.
+- [ ] **Run Migration**: Apply schema changes to DB.
 
-### Azure Cache for Redis
-**Use Cases:**
-- Session storage
-- Rate limiting
-- API response caching
-- Job queue (BullMQ)
-- Real-time data
+### 1.2 Basic Auth (Finish Fully)
+- [ ] **Register API**: Endpoint `POST /auth/register` (Email/Password). Hash specific password (bcrypt).
+- [ ] **Login API**: Endpoint `POST /auth/login`. Validate creds, return JWT (Access + Refresh).
+- [ ] **JWT Strategy**: Implement Passport-JWT strategy.
+    - **Access Token**: Short-lived (15m).
+    - **Refresh Token**: Long-lived (7d), stored HTTP-only cookie.
+    - **Token Blacklist**: Redis integration for logout/revocation.
+- [ ] **Logout API**: Endpoint `POST /auth/logout` (Invalidate tokens).
 
-### Azure AI Search (Vector + Search)
-**Indexes:**
-- Resume embeddings
-- Job descriptions
-- Skill vectors
-- Candidate search
+### 1.3 Email Verification
+- [ ] **Token Gen**: Generate cryptographically secure random token.
+- [ ] **SendGrid Service**: Integrate SendGrid to send emails.
+- [ ] **Verify Endpoint**: `GET /auth/verify-email?token=xyz`. Updates `is_verified = true`.
+- [ ] **Resend Flow**: API to trigger a new verification email.
 
----
+### 1.4 Password Management
+- [ ] **Forgot Password**: `POST /auth/forgot-password` (sends magic link/code).
+- [ ] **Reset Password**: `POST /auth/reset-password` (verifies token, updates hash).
+- [ ] **Security**: Invalidate all sessions (refresh tokens) on password change.
 
-## 🏗️ System Architecture (MVP)
+### 1.5 Azure AD B2C & Social Login
+- [ ] **B2C Tenant**: Create and configure Azure AD B2C tenant.
+- [ ] **App Registration**: Register app, get Client ID/Secret.
+- [ ] **Social Providers**: Configure Google, GitHub, LinkedIn in B2C dashboard.
+- [ ] **Token Validation**: Middleware to validate B2C tokens alongside internal JWTs.
+- [ ] **Link Users**: Logic to map B2C `oid` to internal `User` record (upsert).
 
-```mermaid
-graph TB
-    subgraph "Frontend - Next.js Apps"
-        CandidateApp[Candidate Portal]
-        RecruiterApp[Recruiter Portal]
-    end
-    
-    subgraph "Azure Container Apps"
-        Gateway[API Gateway]
-        Auth[Auth Service]
-        User[User Service]
-        Job[Job Service]
-        Notification[Notification Service]
-    end
-    
-    subgraph "Python Services - Azure Container Apps"
-        Analysis[Analysis Service]
-        Matching[Matching Service]
-    end
-    
-    subgraph "Azure Data Services"
-        PostgreSQL[(Azure SQL - PostgreSQL)]
-        MongoDB[(Cosmos DB - MongoDB API)]
-        Redis[(Azure Cache for Redis)]
-        BlobStorage[(Azure Blob Storage)]
-        AISearch[Azure AI Search]
-    end
-    
-    subgraph "Azure AI Services"
-        OpenAI[Azure OpenAI Service]
-        DocIntel[Document Intelligence]
-        AILanguage[AI Language Service]
-    end
-    
-    subgraph "External APIs"
-        GitHub[GitHub API]
-        LinkedIn[LinkedIn API]
-        AzureAD[Azure AD B2C]
-    end
-    
-    CandidateApp --> Gateway
-    RecruiterApp --> Gateway
-    
-    Gateway --> Auth
-    Gateway --> User
-    Gateway --> Job
-    Gateway --> Analysis
-    Gateway --> Matching
-    
-    Auth --> AzureAD
-    Auth --> Redis
-    Auth --> PostgreSQL
-    
-    User --> PostgreSQL
-    Job --> PostgreSQL
-    
-    Analysis --> MongoDB
-    Analysis --> OpenAI
-    Analysis --> DocIntel
-    Analysis --> AILanguage
-    Analysis --> GitHub
-    Analysis --> LinkedIn
-    Analysis --> BlobStorage
-    
-    Matching --> AISearch
-    Matching --> OpenAI
-    Matching --> PostgreSQL
-    
-    Notification --> Redis
-```
+✅ **STOP CONDITION**: You can register (Email/Social), login, get a valid JWT, verify email, and logout. All routes protected by Guard reject unauthenticated requests.
 
 ---
 
-## 📁 Repository Structure
+## 👤 STAGE 2: BASIC USER PROFILE (MODULE 2 – CORE DATA)
 
-### Hybrid Monorepo Approach
+**Goal**: Users exist. Now give them a face. **NO AI yet.**
 
-```
-perfect-fit/
-├── .github/
-│   └── workflows/          # CI/CD pipelines
-├── apps/
-│   ├── candidate-portal/   # Next.js app
-│   ├── recruiter-portal/   # Next.js app
-│   └── landing-page/       # Marketing site
-├── services/
-│   ├── gateway/            # API Gateway (NestJS)
-│   ├── auth/               # Auth Service (NestJS)
-│   ├── user/               # User Service (NestJS)
-│   ├── job/                # Job Service (NestJS)
-│   ├── notification/       # Notification Service (NestJS)
-│   ├── analysis/           # Analysis Service (Python/FastAPI)
-│   └── matching/           # Matching Service (Python/FastAPI)
-├── packages/
-│   ├── ui-components/      # Shared React components
-│   ├── shared-types/       # TypeScript types
-│   ├── config/             # Shared configs
-│   └── utils/              # Shared utilities
-├── infrastructure/
-│   ├── terraform/          # Azure + GCP IaC
-│   ├── kubernetes/         # K8s manifests (if used)
-│   └── docker/             # Dockerfiles
-├── docs/
-│   ├── api/                # API documentation
-│   ├── architecture/       # Architecture diagrams
-│   └── setup/              # Setup guides
-├── scripts/
-│   └── setup/              # Development setup scripts
-├── package.json            # Root package.json (Turborepo)
-├── turbo.json              # Turborepo config
-├── nx.json                 # Nx config (alternative)
-└── README.md
-```
+### 2.1 Profile Schema
+- [ ] **Schema**: Create `CandidateProfile` and `RecruiterProfile` tables linked to `User`.
+    - Fields: `firstName`, `lastName`, `phone`, `location`, `headline`, `bio`, `visibility` (Public/Private).
+- [ ] **Migration**: Run Prisma migration.
 
-**Monorepo Tool:** Turborepo or Nx
+### 2.2 Profile APIs
+- [ ] **GET /profile/me**: Retrieve current user's profile.
+- [ ] **PUT /profile/me**: Update mutable fields. Use DTOs for validation.
+- [ ] **Validation**: Ensure phone number format, string lengths.
+
+### 2.3 Profile Completion Engine
+- [ ] **Logic**: Service method `calculateCompletion%()`.
+    - Rules: Name+Loc (20%), Bio (10%), Experience (30%), etc.
+- [ ] **API**: Expose completion score in profile response.
+
+✅ **STOP CONDITION**: User can fully CRUD their personal details. DB reflects changes immediately.
 
 ---
 
-## 🚀 12-Week MVP Roadmap
+## 📝 STAGE 3: EXPERIENCE, EDUCATION, SKILLS (MODULE 2.1)
 
-### Week 1-2: Foundation & Setup
-**Infrastructure**
-- [ ] Setup Azure account and resource groups
-- [ ] Create Azure SQL Database (PostgreSQL)
-- [ ] Create Azure Cosmos DB (MongoDB API)
-- [ ] Setup Azure Cache for Redis
-- [ ] Setup Azure Blob Storage
-- [ ] Configure Azure AD B2C tenant
-- [ ] Setup Azure OpenAI Service
-- [ ] Setup Azure AI Document Intelligence
-- [ ] Setup Azure AI Search
+**Goal**: The "meat" of the candidate profile.
 
-**Repository**
-- [ ] Initialize monorepo (Turborepo)
-- [ ] Setup ESLint, Prettier, TypeScript configs
-- [ ] Create CI/CD pipelines (GitHub Actions)
-- [ ] Setup Docker configurations
-- [ ] Create development environment docs
+### 3.1 Experience
+- [ ] **Schema**: `Experience` table (User 1:N Experience).
+    - `company`, `title`, `start_date`, `end_date`, `is_current`, `description`.
+- [ ] **APIs**: CRUD endpoints `/profile/experience`.
+- [ ] **Validation**: `end_date` cannot be before `start_date`.
 
-**Team Setup**
-- [ ] Development environment setup for all devs
-- [ ] Code standards and conventions
-- [ ] Git workflow (feature branches, PR process)
+### 3.2 Education
+- [ ] **Schema**: `Education` table.
+    - `institution`, `degree`, `field`, `start_date`, `end_date`.
+- [ ] **APIs**: CRUD endpoints `/profile/education`.
 
----
+### 3.3 Skills
+- [ ] **Schema**: `Skill` (Master list) and `UserSkill` (Pivot table with proficiency).
+- [ ] **Seed Data**: Populate initial list of 50-100 common tech skills.
+- [ ] **APIs**:
+    - `GET /skills/search?q=`: Autocomplete.
+    - `POST /profile/skills`: Add/Remove skills.
 
-### Week 3-4: Authentication & User Service
+### 3.4 Certifications
+- [ ] **Schema**: `Certification` table (`name`, `issuer`, `date`, `url`).
+- [ ] **APIs**: CRUD endpoints.
 
-**Auth Service (NestJS)**
-- [ ] Implement Azure AD B2C integration
-- [ ] Create JWT token generation/validation
-- [ ] Implement refresh token flow
-- [ ] Add password hashing (bcrypt)
-- [ ] Create auth middleware
-- [ ] API endpoints: register, login, logout, refresh
-- [ ] Rate limiting on auth endpoints
-- [ ] Unit tests for auth flows
+### 3.5 Recalculate Logic
+- [ ] **Trigger**: On any update to these sections, re-trigger `calculateCompletion%()`.
 
-**User Service (NestJS)**
-- [ ] Prisma schema for users
-- [ ] User CRUD operations
-- [ ] Role-based access control (candidate/recruiter)
-- [ ] Profile image upload (Azure Blob)
-- [ ] Email verification flow
-- [ ] User search functionality
-- [ ] Unit + integration tests
-
-**Database**
-- [ ] Design and create PostgreSQL schema
-- [ ] Run Prisma migrations
-- [ ] Seed test data
+✅ **STOP CONDITION**: A user can manually build a complete LinkedIn-style profile via API.
 
 ---
 
-### Week 5-6: Candidate & Recruiter Profiles
+## 📄 STAGE 4: RESUME STORAGE & PARSING (MODULE 2.2)
 
-**Candidate Profile Service**
-- [ ] Extended profile model (skills, experience, education)
-- [ ] Resume upload to Azure Blob
-- [ ] GitHub account linking
-- [ ] LinkedIn account linking (OAuth)
-- [ ] Profile completion tracking
-- [ ] Profile visibility settings
-- [ ] API endpoints for profile management
-- [ ] Tests
+**Goal**: Automate data entry. Turn PDFs into structured data.
 
-**Recruiter Profile Service**
-- [ ] Company profile creation
-- [ ] Recruiter profile model
-- [ ] Company verification workflow
-- [ ] Team member invitations
-- [ ] API endpoints
-- [ ] Tests
+### 4.1 Resume Upload
+- [ ] **API**: `POST /resume/upload`.
+- [ ] **Validation**: File type (PDF/DOCX), Size (<5MB).
+- [ ] **Storage**: Stream file to Azure Blob Storage (`resumes` container). Saving path to DB `User.resume_url`.
 
----
+### 4.2 Resume Download
+- [ ] **API**: `GET /resume/download`.
+- [ ] **Security**: Generate SAS (Shared Access Signature) URL (expires in 1h) so private blobs aren't public.
 
-### Week 7-8: Job Posting & Analysis Setup
+### 4.3 Resume Parsing (Azure Doc Intelligence)
+- [ ] **Integration**: Connect Python/NestJS service to Azure Document Intelligence (Prebuilt Layout/Resume model).
+- [ ] **Extraction**: Call API with blob URL. Receive JSON response.
+- [ ] **Normalization**: Map Azure's rigid JSON to our `Experience`/`Education` DTOs.
 
-**Job Service (NestJS)**
-- [ ] Job posting model
-- [ ] Create/edit/delete job postings
-- [ ] Job status management (draft, active, closed)
-- [ ] Job search and filtering
-- [ ] Job embeddings for matching (Azure AI Search)
-- [ ] API endpoints
-- [ ] Tests
+### 4.4 Auto-Populate Flow
+- [ ] **Draft Mode**: Save parsed data as "Draft" entries or return to UI for confirmation.
+- [ ] **Confirmation API**: User reviews parsed data -> `POST /profile/confirm-resume-data` -> commits to DB.
 
-**Analysis Service Foundation (Python/FastAPI)**
-- [ ] Setup FastAPI project
-- [ ] Connect to Azure Cosmos DB
-- [ ] Connect to Azure Blob Storage
-- [ ] Connect to Azure OpenAI Service
-- [ ] Connect to Azure Document Intelligence
-- [ ] Setup Celery for async tasks
-- [ ] Create base analysis models
-- [ ] Tests
+✅ **STOP CONDITION**: Upload a PDF -> Wait -> DB is populated with correct Job Titles, Dates, and Schools.
 
 ---
 
-### Week 9-10: AI-Powered Analysis
+## 🧠 STAGE 5: AI RESUME ANALYSIS (MODULE 4.1 – PART 1)
 
-**Resume Analysis**
-- [ ] Resume parsing with Azure Document Intelligence
-- [ ] Extract entities (skills, experience, education)
-- [ ] Generate resume embeddings (Azure OpenAI)
-- [ ] Quality scoring with GPT-4
-- [ ] Consistency checking
-- [ ] Store results in Cosmos DB
-- [ ] API endpoints
-- [ ] Tests
+**Goal**: Provide qualitative feedback on the resume.
 
-**GitHub Analysis**
-- [ ] Connect to GitHub API
-- [ ] Fetch user repositories
-- [ ] Analyze commit history
-- [ ] Code language analysis
-- [ ] Project complexity scoring
-- [ ] Contribution patterns
-- [ ] Generate GitHub score
-- [ ] Cache results
-- [ ] API endpoints
-- [ ] Tests
+### 5.1 Resume Text Prep
+- [ ] **Text Extraction**: Ensure we have clean full-text from Stage 4.
 
-**LinkedIn Analysis**
-- [ ] Connect to LinkedIn API (or scraping with consent)
-- [ ] Extract work history
-- [ ] Extract skills and endorsements
-- [ ] Validate resume vs LinkedIn consistency
-- [ ] Generate LinkedIn score
-- [ ] API endpoints
-- [ ] Tests
+### 5.2 GPT Resume Analysis
+- [ ] **Prompt Engineering**: Create system prompt for "Resume Critic".
+    - Criteria: Clarity, Impact (Action verbs), Formatting (detected via rules), Skills gaps.
+- [ ] **Service**: Call Azure OpenAI (GPT-3.5/4).
+- [ ] **Output**: Structured JSON `{ "score": 85, "strengths": [], "weaknesses": [], "improvements": [] }`.
+
+### 5.3 Store Analysis
+- [ ] **Schema**: `ResumeAnalysis` table/collection (CosmosDB or JSONB in Postgres).
+- [ ] **Versioning**: Link analysis to specific resume version.
+
+✅ **STOP CONDITION**: Every uploaded resume gets a persistent "Score" and "Critique" stored in the DB.
 
 ---
 
-### Week 11: Matching & Scoring
+## 🐙 STAGE 6: GITHUB INTEGRATION & ANALYSIS (MODULE 2.3)
 
-**Matching Service (Python/FastAPI)**
-- [ ] Candidate scorecard generation
-- [ ] Combine resume, GitHub, LinkedIn scores
-- [ ] Overall candidate scoring algorithm
-- [ ] Job-candidate matching with Azure OpenAI
-- [ ] Semantic search using Azure AI Search
-- [ ] Match score calculation (cosine similarity)
-- [ ] API endpoints
-- [ ] Tests
+**Goal**: Prove coding ability via public history.
 
-**Candidate Scorecard**
-- [ ] Generate comprehensive scorecard
-- [ ] Technical skills score
-- [ ] Experience score
-- [ ] Consistency score
-- [ ] GitHub activity score
-- [ ] Overall fit score
-- [ ] Store in Cosmos DB
+### 6.1 OAuth Flow
+- [ ] **GitHub App**: Register in GitHub Developer settings.
+- [ ] **Connect API**: `GET /auth/github` -> Redirect.
+- [ ] **Callback**: Exchange code for Access Token. Store encrypted token in DB.
 
----
+### 6.2 Data Fetch
+- [ ] **Client**: Setup `Octokit` or raw HTTP client.
+- [ ] **Fetcher Service**:
+    - Get User Profile (Followers, Public Repos).
+    - Get Top Repos (Stars, Forks, Language).
+    - Get Commit Activity (Last year).
 
-### Week 12: Frontend Development
+### 6.3 Code Analysis (Lightweight)
+- [ ] **Static Analysis**: (Optional for MVP, maybe just count lines/languages).
+- [ ] **Quality Checks**: Check for `README.md`, `TESTS`, CI workflows in top repos.
 
-**Candidate Portal (Next.js)**
-- [ ] Setup Next.js 14 app
-- [ ] Setup TailwindCSS + shadcn/ui
-- [ ] Authentication pages (login, register)
-- [ ] Profile creation flow
-- [ ] Resume upload interface
-- [ ] GitHub/LinkedIn connection
-- [ ] View personal scorecard
-- [ ] Browse available jobs
-- [ ] Apply to jobs
-- [ ] Responsive design
-- [ ] Tests
+### 6.4 GitHub Scoring Engine
+- [ ] **Algorithm**: `calculateGitHubScore(data)`.
+    - Weights: Commit consistency (40%), Repo popularity (30%), Code diversity (30%).
+- [ ] **Storage**: Save result to `CandidateScorecard` (partial).
 
-**Recruiter Portal (Next.js)**
-- [ ] Setup Next.js 14 app
-- [ ] Authentication pages
-- [ ] Company profile setup
-- [ ] Create/manage job postings
-- [ ] View candidate applications
-- [ ] Search candidates
-- [ ] View candidate scorecards
-- [ ] Dashboard with analytics
-- [ ] Responsive design
-- [ ] Tests
+### 6.5 Scheduled Refresh
+- [ ] **BullMQ**: Setup a daily/weekly job to refresh stats.
 
-**Shared Components**
-- [ ] Design system setup
-- [ ] Reusable UI components
-- [ ] Form components
-- [ ] Table components
-- [ ] Card components
+✅ **STOP CONDITION**: Connect GitHub -> Wait ~1 min -> "GitHub Score: 78/100" appears in DB with breakdown.
 
 ---
 
-### Week 13-14: Integration, Testing & Launch Prep
+## 💼 STAGE 7: LINKEDIN INTEGRATION & TRUST (MODULE 2.4)
 
-**Integration**
-- [ ] End-to-end testing
-- [ ] Integration testing across services
-- [ ] Performance testing
-- [ ] Security audit
-- [ ] Bug fixes
+**Goal**: Establish credibility & fraud resistance.
 
-**DevOps**
-- [ ] Deploy to Azure staging environment
-- [ ] Setup monitoring (Azure Monitor)
-- [ ] Setup logging (Azure Log Analytics)
-- [ ] Setup alerts
-- [ ] Load testing
-- [ ] Backup strategies
+### 7.1 LinkedIn OAuth
+- [ ] **App Setup**: Register LinkedIn App (Sign In with LinkedIn).
+- [ ] **Connect Flow**: Standard OAuth 2.0 flow. Store token.
 
-**Documentation**
-- [ ] API documentation (Swagger)
-- [ ] User guides
-- [ ] Developer documentation
-- [ ] Deployment runbooks
+### 7.2 LinkedIn Data Ingestion
+- [ ] **Profile**: Basic fields (Name, Avatar).
+- [ ] **Compliance**: Respect LinkedIn API limits and TOS (use official API for basic profile, or user-provided export if API limited).
 
-**Beta Launch Prep**
-- [ ] Invite beta users (10-20 companies, 50-100 candidates)
-- [ ] Feedback collection mechanism
-- [ ] Support channels
+### 7.3 Data Normalization
+- [ ] **Mapping**: Convert LinkedIn JSON to our `Experience` schema.
 
----
+### 7.4 Consistency Check (Anti-Fraud)
+- [ ] **Engine**: Compare `Resume.Experience` vs `LinkedIn.Experience`.
+- [ ] **Flags**: Detect dates mismatch > 3 months, missing companies, title inflation.
 
-## 💰 MVP Cost Estimate
+### 7.5 LinkedIn Credibility Score
+- [ ] **Scoring**:
+    - Profile Completeness.
+    - Connection Count (if available) as proxy for networking.
+    - Consistency Score (Resume vs LinkedIn).
+- [ ] **Storage**: Update `CandidateScorecard`.
 
-### Azure Monthly Costs (Production)
-
-| Service | Tier | Monthly Cost |
-|---------|------|--------------|
-| **App Services / Container Apps** | Basic tier (3 containers) | $200 - $400 |
-| **Azure SQL Database** | Basic tier (PostgreSQL) | $150 - $300 |
-| **Cosmos DB** | Serverless (MongoDB API) | $100 - $300 |
-| **Redis Cache** | Basic (250 MB) | $20 - $50 |
-| **Blob Storage** | Standard (100 GB) | $20 - $30 |
-| **Azure AD B2C** | Free tier (50k MAU) | $0 - $50 |
-| **Azure AI Search** | Basic tier | $75 |
-| **Monitoring & Logs** | Basic | $50 - $100 |
-| **Bandwidth** | Outbound | $50 - $100 |
-
-**Azure Total: $665 - $1,400/month**
-
-### GCP Monthly Costs (Trial Period)
-
-| Service | Free Tier / Trial | After Trial |
-|---------|-------------------|-------------|
-| **Vertex AI** | $300 free credit + GenAI trial | $200 - $1,000/month |
-| **Recommendations AI** | Trial credits | $100 - $500/month |
-
-**GCP Total: $0 (during trial) → $300 - $1,500/month**
-
-### Development Tools
-
-| Tool | Cost |
-|------|------|
-| **GitHub** | Team plan | $4/user/month |
-| **Monitoring (optional)** | New Relic / Datadog | $100 - $300/month |
-| **Email Service** | SendGrid free tier | $0 - $20/month |
-
-### Total MVP Monthly Cost
-- **Development (low usage):** $500 - $1,000/month
-- **Production (moderate usage):** $915 - $2,450/month
-- **Scale (high usage):** $2,000 - $4,000/month
-
-### One-Time Costs
-- Domain & SSL: $50
-- Initial setup & configuration: included in dev time
-- Azure OpenAI Service application (if required): $0
-
-### Free Tiers Available
-- Azure Free Account: $200 credit for 30 days
-- Azure OpenAI: Available with standard Azure subscription
-- Azure AI Document Intelligence: 500 pages/month free
-- Azure AI Language: 5,000 text records/month free
+✅ **STOP CONDITION**: User links LinkedIn -> System generates a "Trust Score" and "Consistency Report".
 
 ---
 
-## 👥 Team Requirements (Minimum)
+## 🏢 STAGE 8: RECRUITER & COMPANY CORE (MODULE 3.1 + 3.2)
 
-| Role | Count | Responsibility |
-|------|-------|----------------|
-| **Full-Stack Engineer** | 2 | Frontend + Backend |
-| **Backend Engineer** | 1 | NestJS services |
-| **AI/ML Engineer** | 1 | Python AI services |
-| **DevOps Engineer** | 0.5 | Infrastructure & CI/CD |
-| **UI/UX Designer** | 0.5 | Design system & UX |
-| **Tech Lead** | 1 | Architecture & coordination |
+**Goal**: Enable the "Demand" side of the marketplace.
 
-**Total: 6 people** (some part-time)
+### 8.1 Company Core Schema
+- [ ] **Schema**: `Company` table (`name`, `domain`, `description`, `logo_url`, `is_verified`).
 
----
+### 8.2 Company Registration Flow
+- [ ] **API**: `POST /company/register`.
+- [ ] **Validation**: Check if email domain is NOT generic (gmail, yahoo).
+- [ ] **Mapping**: Auto-assign first user as "Admin".
 
-## 🔐 Security Checklist
+### 8.3 Company Verification
+- [ ] **Auto-Check**: DNS check (optional) or Domain ownership.
+- [ ] **Manual**: Admin UI to toggle `is_verified`.
 
-- [ ] Azure AD B2C configured properly
-- [ ] JWT tokens with short expiry (15 min)
-- [ ] Refresh tokens with rotation
-- [ ] HTTPS/TLS everywhere
-- [ ] Database connection encryption
-- [ ] Secrets in Azure Key Vault
-- [ ] Input validation on all endpoints
-- [ ] Rate limiting (Redis)
-- [ ] CORS configuration
-- [ ] SQL injection prevention (Prisma)
-- [ ] XSS prevention
-- [ ] CSRF tokens
-- [ ] File upload validation
-- [ ] Virus scanning on uploads (Azure Defender)
-- [ ] Audit logging
-- [ ] GDPR compliance (data deletion, consent)
+### 8.4 Recruiter User Mapping
+- [ ] **Schema**: `CompanyUser` table (User -> Company).
+- [ ] **Roles**: Admin, Recruiter, Viewer.
+
+### 8.5 Team Invitations
+- [ ] **Invite API**: `POST /company/invite` (Email).
+- [ ] **Token**: Generate invite token/email.
+- [ ] **Accept Flow**: `POST /company/join` (consumes token).
+
+### 8.6 RBAC Enforcement
+- [ ] **Guards**: Ensure only `CompanyAdmin` can invite/remove users.
+
+✅ **STOP CONDITION**: A company exists, has a verified status, and multiple recruiters can belong to it.
 
 ---
 
-## 📊 Success Metrics (MVP)
+## 💼 STAGE 9: JOB POSTING SYSTEM (MODULE 3.3)
 
-### Technical KPIs
-- API response time < 300ms (p95)
-- Resume analysis < 30 seconds
-- GitHub analysis < 60 seconds
-- System uptime > 99%
-- Zero critical security issues
+**Goal**: Create structured demand data.
 
-### Business KPIs
-- 50+ candidate registrations (beta)
-- 10+ recruiter/company registrations (beta)
-- 20+ job postings
-- 100+ resume analyses completed
-- User satisfaction > 4/5
-- Profile completion rate > 70%
+### 9.1 Job Core Schema
+- [ ] **Schema**: `Job` table.
+    - `title`, `type` (Remote/Hybrid), `salary_min`, `salary_max`, `status` (Draft/Live/Closed).
+    - Link to `Company`.
 
----
+### 9.2 Job Description Builder
+- [ ] **Fields**: `description` (Rich Text/Markdown), `responsibilities` (Array), `requirements` (Array).
 
-## 🎯 Next Steps
+### 9.3 Skill Requirement Engine
+- [ ] **Linkage**: `JobSkill` table.
+    - `skill_id`, `priority` (Must-Have vs Nice-to-Have), `level`.
+- [ ] **API**: Select skills from Master list.
 
-1. **Setup Azure and GCP accounts**
-2. **Create repository structure**
-3. **Setup development environment**
-4. **Start Week 1 tasks**
+### 9.4 Lifecycle Management
+- [ ] **APIs**: Publish, Pause, Close endpoints.
+- [ ] **Validation**: Cannot publish without Title, Description, and at least 1 Must-Have skill.
 
----
+### 9.5 Job Embedding Pipeline
+- [ ] **Trigger**: On Publish/Update.
+- [ ] **Generation**: Create text chunk: "Title + Description + Skills".
+- [ ] **Embedding**: Call Azure OpenAI Embeddings.
+- [ ] **Vector Store**: Save vector to Azure AI Search index.
 
-## ⚠️ Risks & Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| **GCP trial credits expire** | High cost increase | Plan Azure OpenAI migration, monitor usage |
-| **LinkedIn API access** | No LinkedIn analysis | Use alternative data sources or manual input |
-| **GitHub API rate limits** | Analysis failures | Implement caching, use GitHub App authentication |
-| **Complexity of Azure AD B2C** | Auth delays | Fallback to simple JWT if needed |
-| **AI analysis quality** | Poor user experience | Human review loop, continuous model improvement |
-| **Scope creep** | Delayed launch | Strict MVP scope, defer features to Phase 2 |
+✅ **STOP CONDITION**: Recruiter posts a job -> It is searchable and has a vector representation in AI Search.
 
 ---
 
-## 📝 Notes
+## 🤖 STAGE 10: CANDIDATE SCORECARD ENGINE (MODULE 4.1 – FULL)
 
-- **Start small, iterate fast**
-- Focus on core value: AI-powered resume + GitHub analysis
-- Get beta users early (Week 10+)
-- Collect feedback continuously
-- Be ready to pivot based on user feedback
+**Goal**: The "One Score to Rule Them All".
 
-**Once you approve this plan, I'll start creating the repository structure and initial setup!** 🚀
+### 10.1 Aggregation
+- [ ] **Service**: `ScorecardService`.
+- [ ] **Inputs**: Fetch Resume Score, GitHub Score, LinkedIn Score, Skill Match % (dynamic per job).
+
+### 10.2 Weighting Engine
+- [ ] **Config**: Define weights (e.g., Tech Role: Skills 40%, GitHub 20%, Exp 20%).
+
+### 10.3 Calculation
+- [ ] **Formula**: Weighted Average.
+- [ ] **Output**: Final Score (0-100).
+
+### 10.4 Explainability
+- [ ] **Generation**: Use simple logic or LLM to generate "Why this score?": "Strong GitHub, but missing React skill".
+
+### 10.5 Versioning
+- [ ] **History**: Track score changes.
+
+✅ **STOP CONDITION**: Every Candidate + Job pair can generate a Scorecard on demand.
+
+---
+
+## 🎯 STAGE 11: JOB–CANDIDATE MATCHING ENGINE (MODULE 4.2)
+
+**Goal**: The core value prop. Connect Supply & Demand.
+
+### 11.1 Rule-Based Matching (Hard constraints)
+- [ ] **Filters**: Exclude if "Must-Have" skills missing (optional configuration), or Location mismatch.
+
+### 11.2 Semantic Matching (Soft constraints)
+- [ ] **Search**: Query Azure AI Search with Job Vector -> Get closest Candidate Vectors.
+- [ ] **Similarity**: Calculate Cosine Similarity.
+
+### 11.3 Composite Match Score
+- [ ] **Aggr**: Combine Semantic Score + Rule-Based Score.
+
+### 11.4 Backend Ranking
+- [ ] **API**: `GET /jobs/:id/matches`.
+- [ ] **Logic**: Return list of Candidates sorted by Match %.
+
+✅ **STOP CONDITION**: API returns sorted list of candidates relevant to a specific job.
+
+---
+
+## 🔍 STAGE 12: SEARCH & DISCOVERY (MODULE 4.3)
+
+**Goal**: Allow Recruiter to hunt manually.
+
+### 12.1 Indexing
+- [ ] **Sync**: Ensure User/Profile changes sync to Azure AI Search index in near-real-time.
+
+### 12.2 Search Engine
+- [ ] **API**: `GET /search/candidates`.
+- [ ] **Features**: Full-text search (Name, Bio, Job Title).
+
+### 12.3 Filtering
+- [ ] **Facets**: Filter by Skill, Experience Years, Location.
+
+### 12.4 Saved Searches
+- [ ] **Schema**: `SavedSearch` table (`criteria_json`, `user_id`).
+- [ ] **Alerts**: Boolean `notify_me`.
+
+✅ **STOP CONDITION**: Recruiter can search "React Dev London", filter by "3+ years", and see results.
+
+---
+
+## 🖥️ STAGE 13: CANDIDATE FRONTEND (MODULE 5)
+
+**Goal**: The UI for the Candidate. *Build this only after APIs work.*
+
+### 13.1 Auth & Onboarding UI
+- [ ] **Pages**: Login, Register, Forgot Password.
+- [ ] **Integration**: Connect to Module 1 APIs.
+
+### 13.2 Profile Wizard
+- [ ] **UX**: Multi-step form (Info -> Exp -> Edu -> Skills).
+- [ ] **Components**: Date pickers, Skill autocomplete chips.
+
+### 13.3 Resume / Integrations UI
+- [ ] **Resume**: File upload with progress bar. Parsing loading state. Review screen.
+- [ ] **Socials**: "Connect GitHub" / "Connect LinkedIn" buttons.
+
+### 13.4 Job Discovery & Apply
+- [ ] **Search**: Job list with filters.
+- [ ] **Apply**: "One Click Apply" button.
+
+### 13.5 Scorecard UI
+- [ ] **Dashboard**: Show user their own "Profile Strength" and "Marketability".
+
+✅ **STOP CONDITION**: A real human can sign up, create profile, and apply to a test job via UI.
+
+---
+
+## 💼 STAGE 14: RECRUITER FRONTEND (MODULE 6)
+
+**Goal**: The UI for the Recruiter.
+
+### 14.1 Onboarding & Company
+- [ ] **Company Setup**: Form to create company.
+- [ ] **Team**: Invite modal.
+
+### 14.2 Job Management UI
+- [ ] **Dashboard**: List of jobs (Active, Draft).
+- [ ] **Editor**: Job creation wizard with Rich Text Editor.
+
+### 14.3 Candidate Discovery UI
+- [ ] **Search**: Search bar + Filters sidebar.
+- [ ] **Results**: Card view of candidates.
+
+### 14.4 Pipeline UI
+- [ ] **ATS View**: Kanban board or List for a specific job.
+- [ ] **Scorecard**: Visual display of the Match Score breakdown.
+
+✅ **STOP CONDITION**: Recruiter can post job, search candidates, and move applicant to "Interview" stage.
+
+---
+
+## 🔔 STAGE 15: NOTIFICATIONS (MODULE 7)
+
+**Goal**: Keep users engaged.
+
+### 15.1 Event Definitions
+- [ ] **Triggers**: Define events (Applied, Viewed, Invited, Matched).
+
+### 15.2 Email Engine
+- [ ] **Templates**: HTML templates for each event.
+- [ ] **Worker**: Queue listener to send emails asynchronously.
+
+### 15.3 In-App Notifications
+- [ ] **Schema**: `Notification` table.
+- [ ] **UI**: Notification Bell in navbar with "Mark as Read".
+
+✅ **STOP CONDITION**: Actions in UI trigger real emails and red badge updates in Navbar.
+
+---
+
+## 🔒 STAGE 16: SECURITY & GDPR (MODULE 8)
+
+**Goal**: Production hardening.
+
+### 16.1 Security Hardening
+- [ ] **Rate Limiting**: Configure strict limits on publicly exposed endpoints.
+- [ ] **Scanning**: Enable container scanning, dep checks.
+
+### 16.2 Data Privacy
+- [ ] **Export**: `GET /me/export` (GDPR).
+- [ ] **Forget Me**: `DELETE /me` (Hard delete or anonymize).
+
+✅ **STOP CONDITION**: Passes basic security audit.
+
+---
+
+## 📊 STAGE 17: ANALYTICS & MONITORING (MODULE 9)
+
+**Goal**: Visibility.
+
+### 17.1 Product Analytics
+- [ ] **Tracking**: DB counters for simple internal analytics.
+
+### 17.2 System Monitoring
+- [ ] **Logs**: Azure Monitor / App Insights fully wired.
+- [ ] **Alerts**: Slack/Email alert on 500 errors > 1%.
+
+✅ **FINAL STOP CONDITION**: Platform is deployed, monitored, and features work end-to-end.
