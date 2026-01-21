@@ -1,56 +1,73 @@
-Write-Host "🚀 Starting Perfect-Fit Project Setup..." -ForegroundColor Cyan
+Write-Host "Starting Perfect-Fit Project Setup..." -ForegroundColor Cyan
 
+# -----------------------------
 # Check for Node.js
+# -----------------------------
 if (Get-Command node -ErrorAction SilentlyContinue) {
     $nodeVersion = node -v
-    Write-Host "✅ Node.js found ($nodeVersion)" -ForegroundColor Green
+    Write-Host "Node.js found ($nodeVersion)" -ForegroundColor Green
 } else {
-    Write-Host "❌ Node.js NOT found. Please install Node.js v20+." -ForegroundColor Red
+    Write-Host "Node.js NOT found. Please install Node.js v20+." -ForegroundColor Red
     exit 1
 }
 
+# -----------------------------
 # Check for Python
+# -----------------------------
 if (Get-Command python -ErrorAction SilentlyContinue) {
     $pythonVersion = python --version
-    Write-Host "✅ Python found ($pythonVersion)" -ForegroundColor Green
+    Write-Host "Python found ($pythonVersion)" -ForegroundColor Green
 } else {
-    Write-Host "❌ Python NOT found. Please install Python 3.11+." -ForegroundColor Red
-    # Don't exit, just warn if they only want frontend
+    Write-Host "Python NOT found. Please install Python 3.11+." -ForegroundColor Red
 }
 
-# 1. Install Node.js Dependencies (Root & Workspaces)
-Write-Host "`n📦 Installing Node.js dependencies (Frontend & Backend Services)..." -ForegroundColor Yellow
+# -----------------------------
+# 1. Install Node.js Dependencies
+# -----------------------------
+Write-Host "`nInstalling Node.js dependencies (Frontend & Backend)..." -ForegroundColor Yellow
 npm install
+
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Node dependencies installed." -ForegroundColor Green
+    Write-Host "Node dependencies installed successfully." -ForegroundColor Green
 } else {
-    Write-Host "❌ Failed to install Node dependencies." -ForegroundColor Red
+    Write-Host "Failed to install Node dependencies." -ForegroundColor Red
     exit 1
 }
 
+# -----------------------------
 # 2. Install Python Dependencies
-Write-Host "`n🐍 Installing Python dependencies (Analytics Service)..." -ForegroundColor Yellow
-if (Test-Path "backend/analytics-service/requirements.txt") {
-    pip install -r backend/analytics-service/requirements.txt
+# -----------------------------
+Write-Host "`nInstalling Python dependencies (Analytics Service)..." -ForegroundColor Yellow
+
+$requirementsPath = "backend/analytics-service/requirements.txt"
+
+if (Test-Path $requirementsPath) {
+    python -m pip install --upgrade pip
+    python -m pip install -r $requirementsPath
+
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Python dependencies installed." -ForegroundColor Green
+        Write-Host "Python dependencies installed successfully." -ForegroundColor Green
     } else {
-        Write-Host "⚠️ Failed to install Python dependencies. Ensure pip is in PATH." -ForegroundColor Yellow
+        Write-Host "Failed to install Python dependencies." -ForegroundColor Yellow
     }
 } else {
-    Write-Host "⚠️ backend/analytics-service/requirements.txt not found." -ForegroundColor Yellow
+    Write-Host "requirements.txt not found at $requirementsPath" -ForegroundColor Yellow
 }
 
-# 3. Check Docker (Informational)
-Write-Host "`n🐳 Checking Docker status..." -ForegroundColor Yellow
+# -----------------------------
+# 3. Check Docker (Optional)
+# -----------------------------
+Write-Host "`nChecking Docker status..." -ForegroundColor Yellow
+
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker --version
-    Write-Host "✅ Docker is installed. Remember to run 'docker compose up -d' for local DBs." -ForegroundColor Green
+    Write-Host "Docker is installed. Use 'docker compose up -d' for DB & Redis." -ForegroundColor Green
 } else {
-    Write-Host "⚠️ Docker not found. You will need it for the local Database and Redis." -ForegroundColor Yellow
+    Write-Host "Docker not found. Required for local DB and Redis." -ForegroundColor Yellow
 }
 
-# 4. Environment File Setup (Copy examples if missing)
-# (Logic to copy .env.example to .env could go here)
-
-Write-Host "`n🎉 Setup Complete! You can now run 'npm run dev:all' to start the project." -ForegroundColor Cyan
+# -----------------------------
+# Final Message
+# -----------------------------
+Write-Host "`nSetup Complete!" -ForegroundColor Cyan
+Write-Host "Run: npm run dev:all" -ForegroundColor Cyan
