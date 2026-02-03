@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code')
 
     if (code) {
+        const cookieStore = new Map<string, { value: string, options: CookieOptions }>()
+
         const supabase = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -15,10 +17,10 @@ export async function GET(request: NextRequest) {
                         return request.cookies.get(name)?.value
                     },
                     set(name: string, value: string, options: CookieOptions) {
-                        // This is handled in the response below
+                        cookieStore.set(name, { value, options })
                     },
                     remove(name: string, options: CookieOptions) {
-                        // This is handled in the response below
+                        cookieStore.set(name, { value: '', options: { ...options, maxAge: 0 } })
                     },
                 },
             }
@@ -56,18 +58,9 @@ export async function GET(request: NextRequest) {
 
             const response = NextResponse.redirect(`${origin}${redirectPath}`)
 
-            // Set the session cookies
-            response.cookies.set('sb-access-token', data.session.access_token, {
-                path: '/',
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7 // 1 week
-            })
-            response.cookies.set('sb-refresh-token', data.session.refresh_token, {
-                path: '/',
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7 // 1 week
+            // Apply the cookies from the temporary store to the response
+            cookieStore.forEach(({ value, options }, name) => {
+                response.cookies.set(name, value, options)
             })
 
             return response

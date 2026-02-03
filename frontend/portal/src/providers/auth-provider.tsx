@@ -102,41 +102,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    async function signInWithEmail(email: string, password: string) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        return { error }
+    const signInWithEmail = async (email: string, password: string) => {
+        setLoading(true)
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        })
+        if (data.session) {
+            setSession(data.session)
+            setUser(data.session.user)
+            // Reset profile loaded state so consumers know to wait
+            setProfileLoaded(false)
+            // Trigger profile fetch immediately
+            fetchProfile(data.session.user.id).then(p => setProfile(p))
+        } else if (error) {
+            setLoading(false)
+        }
+        return { data, error }
     }
 
-    async function signUpWithEmail(email: string, password: string, fullName?: string) {
-        const { error } = await supabase.auth.signUp({
+    const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
+        setLoading(true)
+        const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: { full_name: fullName }
+                data: {
+                    full_name: fullName
+                }
             }
         })
-        return { error }
+        // Note: For signup, usually email verification is needed, so minimal state update
+        if (error) setLoading(false)
+        return { data, error }
     }
 
-    async function signInWithGoogle() {
-        const { error } = await supabase.auth.signInWithOAuth({
+    const signInWithGoogle = async () => {
+        setLoading(true)
+        const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`
+                redirectTo: `${window.location.origin}/auth/callback`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'select_account'
+                }
             }
         })
-        return { error }
+        if (error) setLoading(false)
+        return { data, error }
     }
 
-    async function signInWithAzure() {
-        const { error } = await supabase.auth.signInWithOAuth({
+    const signInWithAzure = async () => {
+        setLoading(true)
+        const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'azure',
             options: {
+                scopes: 'email openid profile offline_access',
                 redirectTo: `${window.location.origin}/auth/callback`,
-                scopes: 'email openid profile'
+                queryParams: {
+                    prompt: 'login' // Forces re-authentication to allow account selection
+                }
             }
         })
-        return { error }
+        if (error) setLoading(false)
+        return { data, error }
     }
 
     async function signOut() {
