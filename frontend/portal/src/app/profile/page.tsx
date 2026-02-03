@@ -1,16 +1,19 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from "next/link"
+import { useAuth } from '@/providers/auth-provider'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Slider } from "@/components/ui/slider"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
-    User,
     MapPin,
     Briefcase,
     Github,
@@ -19,10 +22,46 @@ import {
     AlertCircle,
     Plus,
     Trash2,
-    ExternalLink
-} from "lucide-react";
+    Loader2,
+    LogOut,
+    CheckCircle
+} from "lucide-react"
 
 export default function ProfilePage() {
+    const router = useRouter()
+    const { user, profile, loading, profileLoaded, signOut } = useAuth()
+
+    useEffect(() => {
+        if (!loading && profileLoaded) {
+            if (!user) {
+                router.push('/auth')
+            } else if (profile?.role && profile.role !== 'candidate') {
+                // Non-candidates should go to their respective portals
+                router.push('/auth/redirect')
+            }
+        }
+    }, [user, profile, loading, profileLoaded, router])
+
+    const handleSignOut = async () => {
+        await signOut()
+        router.push('/auth')
+    }
+
+    if (loading || !profileLoaded) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (!user) {
+        return null // Will redirect
+    }
+
+    const displayName = profile?.full_name || user.email?.split('@')[0] || 'User'
+    const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+
     return (
         <div className="min-h-screen bg-muted/20 pb-24">
             {/* Top Navigation Bar */}
@@ -35,12 +74,15 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
                             <span>Draft saved</span>
-                            <CheckIcon className="h-4 w-4 text-green-500" />
+                            <CheckCircle className="h-4 w-4 text-green-500" />
                         </div>
                         <Avatar>
-                            <AvatarImage src="/placeholder-user.jpg" />
-                            <AvatarFallback>MR</AvatarFallback>
+                            <AvatarImage src={profile?.avatar_url || undefined} />
+                            <AvatarFallback>{initials}</AvatarFallback>
                         </Avatar>
+                        <Button variant="outline" size="icon" onClick={handleSignOut}>
+                            <LogOut className="h-4 w-4" />
+                        </Button>
                     </div>
                 </div>
             </header>
@@ -54,12 +96,13 @@ export default function ProfilePage() {
                             <div className="h-24 bg-gradient-to-r from-blue-500 to-purple-500" />
                             <div className="relative -mt-12 mb-4 flex justify-center">
                                 <Avatar className="h-24 w-24 border-4 border-background">
-                                    <AvatarFallback className="text-2xl font-bold bg-muted">MR</AvatarFallback>
+                                    <AvatarImage src={profile?.avatar_url || undefined} />
+                                    <AvatarFallback className="text-2xl font-bold bg-muted">{initials}</AvatarFallback>
                                 </Avatar>
                             </div>
                             <CardContent className="space-y-2 pb-6">
-                                <h2 className="text-xl font-bold">Max Robinson</h2>
-                                <p className="text-sm text-muted-foreground">Full Stack Developer</p>
+                                <h2 className="text-xl font-bold">{displayName}</h2>
+                                <p className="text-sm text-muted-foreground">{user.email}</p>
                                 <Badge variant="outline" className="mt-2 bg-yellow-50 text-yellow-700 border-yellow-200">
                                     <AlertCircle className="mr-1 h-3 w-3" />
                                     Assessment Pending
@@ -221,24 +264,11 @@ export default function ProfilePage() {
                             </div>
                         </div>
 
-                        {/* 6. Feedback (Empty State) */}
-                        <Card className="bg-muted/50 border-dashed">
-                            <CardContent className="py-12 flex flex-col items-center justify-center text-center text-muted-foreground">
-                                <div className="p-4 rounded-full bg-background mb-4">
-                                    <User className="h-6 w-6 opacity-20" />
-                                </div>
-                                <p className="font-medium">Analysis Pending</p>
-                                <p className="text-sm max-w-xs mt-1">
-                                    You’ll receive detailed improvement feedback after your assessment is complete.
-                                </p>
-                            </CardContent>
-                        </Card>
-
                     </div>
                 </section>
             </main>
         </div>
-    );
+    )
 }
 
 function ScoreCardPlaceholder({ title, score }: { title: string; score: string }) {
@@ -251,24 +281,5 @@ function ScoreCardPlaceholder({ title, score }: { title: string; score: string }
                 <div className="text-2xl font-bold text-muted-foreground">{score}</div>
             </CardContent>
         </Card>
-    )
-}
-
-function CheckIcon(props: any) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <polyline points="20 6 9 17 4 12" />
-        </svg>
     )
 }
