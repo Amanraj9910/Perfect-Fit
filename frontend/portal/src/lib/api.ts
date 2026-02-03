@@ -1,27 +1,55 @@
-import axios from "axios";
+import { getSupabaseClient } from './supabase'
 
-// Create an Axios instance
-const api = axios.create({
-    baseURL: "http://localhost:3001", // TODO: Use env var
-    headers: {
-        "Content-Type": "application/json",
-    },
-});
+const API_BASE_URL = 'http://localhost:8000'
 
-// Add a request interceptor to inject the token
-api.interceptors.request.use(
-    (config) => {
-        if (typeof window !== "undefined") {
-            const token = localStorage.getItem("accessToken");
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
+// Generic fetch wrapper with Auth
+async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
+    const supabase = getSupabaseClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const token = session?.access_token
+
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'x-supabase-auth': token } : {}), // Pass Supabase Token
+        ...options.headers,
     }
-);
 
-export default api;
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+    })
+
+    if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody.detail || `API Error: ${response.statusText}`)
+    }
+
+    return response.json()
+}
+
+export const adminApi = {
+    getStats: () => fetchWithAuth('/admin/stats'),
+
+    getUsers: (page = 1, limit = 10, search = '') => {
+        const query = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString(),
+            ...(search ? { search } : {})
+        })
+        return fetchWithAuth(`/admin/users?${query}`)
+    },
+
+    updateUserRole: (userId: string, role: string) =>
+        fetchWithAuth(`/admin/users/${userId}/role`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role })
+        }),
+
+    getAssessments: (limit = 20) => fetchWithAuth(`/admin/assessments?limit=${limit}`),
+
+    getAssessmentDetail: (id: string) => fetchWithAuth(`/admin/assessments/${id}`),
+
+    getAudioUrl: (assessmentId: string, responseId: string) =>
+        fetchWithAuth(`/admin/assessments/${assessmentId}/audio/${responseId}`)
+}
