@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Upload, FileText, User as UserIcon } from "lucide-react";
+import { Loader2, Upload, FileText, User as UserIcon, CheckCircle } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 // Schema for profile details
@@ -217,27 +217,28 @@ export default function ProfilePage() {
     }
 
     return (
-        <div className="container max-w-4xl py-10 space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold">Candidate Profile</h1>
-                <p className="text-muted-foreground">Manage your information and resume.</p>
+
+        <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 space-y-8">
+            <div className="space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight">Candidate Profile</h1>
+                <p className="text-muted-foreground text-lg">Manage your personal information and application assets.</p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-3 gap-8 items-start">
                 {/* Sidebar / Photo */}
-                <Card className="md:col-span-1 h-fit">
-                    <CardHeader>
+                <Card className="md:col-span-1 shadow-md border-muted/60">
+                    <CardHeader className="text-center pb-2">
                         <CardTitle>Profile Picture</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col items-center gap-4">
-                        <Avatar className="h-32 w-32">
-                            <AvatarImage src={profilePicUrl || authProfile?.avatar_url || ""} />
-                            <AvatarFallback className="text-4xl">{form.getValues("full_name")?.[0] || <UserIcon className="h-12 w-12" />}</AvatarFallback>
+                    <CardContent className="flex flex-col items-center gap-6 py-6">
+                        <Avatar className="h-40 w-40 ring-4 ring-background shadow-xl">
+                            <AvatarImage src={profilePicUrl || authProfile?.avatar_url || ""} className="object-cover" />
+                            <AvatarFallback className="text-5xl bg-primary/5">{form.getValues("full_name")?.[0] || <UserIcon className="h-16 w-16 text-muted-foreground/50" />}</AvatarFallback>
                         </Avatar>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" className="relative cursor-pointer" disabled={uploadingPic}>
-                                {uploadingPic ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                                Upload Photo
+                        <div className="w-full">
+                            <Button variant="outline" className="w-full relative overflow-hidden group border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all">
+                                {uploadingPic ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />}
+                                Change Photo
                                 <input
                                     type="file"
                                     className="absolute inset-0 opacity-0 cursor-pointer"
@@ -250,50 +251,85 @@ export default function ProfilePage() {
                 </Card>
 
                 {/* Main Form */}
-                <Card className="md:col-span-2">
+                <Card className="md:col-span-2 shadow-md border-muted/60">
                     <CardHeader>
-                        <CardTitle>Personal Details</CardTitle>
-                        <CardDescription>Update your contact information and bio.</CardDescription>
+                        <CardTitle className="text-xl">Personal Details</CardTitle>
+                        <CardDescription>Update your contact information and professional summary.</CardDescription>
                     </CardHeader>
+                    <Separator className="mb-6 opacity-50" />
                     <CardContent>
                         <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                                <FormField
-                                    control={form.control}
-                                    name="full_name"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Full Name</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="John Doe" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <div className="grid sm:grid-cols-2 gap-4">
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                                <div className="grid gap-6">
                                     <FormField
                                         control={form.control}
-                                        name="phone"
+                                        name="full_name"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Phone</FormLabel>
+                                                <FormLabel className="text-foreground/80">Full Name</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="+1 234 567 890" {...field} />
+                                                    <Input placeholder="John Doe" {...field} className="bg-muted/30 focus:bg-background transition-colors" />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
                                     />
+
+                                    <div className="grid sm:grid-cols-2 gap-6">
+                                        <FormField
+                                            control={form.control}
+                                            name="phone"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-foreground/80">Phone</FormLabel>
+                                                    <FormControl>
+                                                        <Input placeholder="+1 234 567 890" {...field} className="bg-muted/30 focus:bg-background transition-colors" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="experience_years"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-foreground/80">Years of Experience</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" min="0" {...field} className="bg-muted/30 focus:bg-background transition-colors" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
                                     <FormField
                                         control={form.control}
-                                        name="experience_years"
+                                        name="linkedin_url"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Years of Experience</FormLabel>
+                                                <FormLabel className="text-foreground/80">LinkedIn URL</FormLabel>
                                                 <FormControl>
-                                                    <Input type="number" min="0" {...field} />
+                                                    <Input placeholder="https://linkedin.com/in/..." {...field} className="bg-muted/30 focus:bg-background transition-colors" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="bio"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-foreground/80">Bio / Summary</FormLabel>
+                                                <FormControl>
+                                                    <Textarea
+                                                        placeholder="Briefly describe your background, skills, and career goals..."
+                                                        className="resize-none min-h-[120px] bg-muted/30 focus:bg-background transition-colors leading-relaxed"
+                                                        {...field}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -301,54 +337,31 @@ export default function ProfilePage() {
                                     />
                                 </div>
 
-                                <FormField
-                                    control={form.control}
-                                    name="linkedin_url"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>LinkedIn URL</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="https://linkedin.com/in/..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <FormField
-                                    control={form.control}
-                                    name="bio"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Bio / Summary</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="Briefly describe your background..." className="resize-none" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <Separator />
-
-                                <div className="space-y-4">
-                                    <h3 className="text-lg font-medium">Resume</h3>
-                                    <div className="flex items-center gap-4 border p-4 rounded-md bg-muted/20">
-                                        <div className="p-2 bg-primary/10 rounded-full">
-                                            <FileText className="h-6 w-6 text-primary" />
+                                <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/10 p-6 space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                                            <FileText className="h-5 w-5 text-blue-600" />
                                         </div>
+                                        <div>
+                                            <h3 className="font-medium">Resume / CV</h3>
+                                            <p className="text-sm text-muted-foreground">Upload your latest resume (PDF, DOCX)</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-4 pl-12">
                                         <div className="flex-1 overflow-hidden">
                                             {resumeUrl ? (
-                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium hover:underline text-blue-600 truncate block">
-                                                    View Uploaded Resume
+                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline truncate transition-colors">
+                                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                                    View Current Resume
                                                 </a>
                                             ) : (
-                                                <p className="text-sm text-muted-foreground">No resume uploaded</p>
+                                                <p className="text-sm text-muted-foreground italic">No resume uploaded yet</p>
                                             )}
                                         </div>
-                                        <Button variant="secondary" size="sm" className="relative" disabled={uploadingResume} type="button">
-                                            {uploadingResume ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                                            Upload
+                                        <Button variant="secondary" size="sm" className="relative group overflow-hidden" disabled={uploadingResume} type="button">
+                                            {uploadingResume ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2 group-hover:-translate-y-0.5 transition-transform" />}
+                                            {resumeUrl ? "Replace" : "Upload"}
                                             <input
                                                 type="file"
                                                 className="absolute inset-0 opacity-0 cursor-pointer"
@@ -359,10 +372,10 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end pt-4">
-                                    <Button type="submit" disabled={isSaving}>
+                                <div className="flex justify-end pt-4 border-t border-muted/50">
+                                    <Button type="submit" disabled={isSaving} size="lg" className="w-full sm:w-auto shadow-lg hover:shadow-xl transition-all">
                                         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Save Changes
+                                        Save Profile Changes
                                     </Button>
                                 </div>
                             </form>

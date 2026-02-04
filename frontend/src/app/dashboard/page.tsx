@@ -11,7 +11,7 @@ import {
     CardFooter
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, AlertCircle, CheckCircle, Clock, XCircle, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle, Clock, XCircle, ExternalLink, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -74,69 +74,105 @@ export default function CandidateDashboard() {
     };
 
     return (
-        <div className="container max-w-5xl py-12 px-4 space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold">My Applications</h1>
-                <p className="text-muted-foreground">Track the status of your job applications.</p>
+        <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 space-y-10">
+            <div className="space-y-2">
+                <Link href="/jobs" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 mb-2">
+                    ← Back to Jobs
+                </Link>
+                <h1 className="text-3xl font-bold tracking-tight">Application Dashboard</h1>
+                <p className="text-muted-foreground text-lg">Track the progress of your active applications.</p>
             </div>
 
             <div className="grid gap-6">
                 {applications.length === 0 ? (
-                    <Card className="text-center py-12">
-                        <CardContent>
-                            <p className="text-muted-foreground mb-4">You haven't applied to any jobs yet.</p>
-                            <Link href="/jobs">
-                                <Button>Browse Open Positions</Button>
-                            </Link>
+                    <Card className="text-center py-24 border-dashed border-2 shadow-sm bg-muted/20">
+                        <CardContent className="flex flex-col items-center justify-center space-y-4">
+                            <div className="p-4 bg-background rounded-full shadow-sm">
+                                <Briefcase className="h-10 w-10 text-muted-foreground/40" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-xl font-semibold">No applications yet</h3>
+                                <p className="text-muted-foreground max-w-sm mx-auto">
+                                    You haven't applied to any positions. Explore our openings to find your next role.
+                                </p>
+                            </div>
+                            <Button asChild size="lg" className="mt-4 shadow-md hover:shadow-lg transition-all">
+                                <Link href="/jobs">View Open Positions</Link>
+                            </Button>
                         </CardContent>
                     </Card>
                 ) : (
                     applications.map(app => (
-                        <Card key={app.id}>
-                            <CardHeader>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <CardTitle className="text-xl text-primary">{app.job_title || "Job Application"}</CardTitle>
-                                        <CardDescription>Applied on {new Date(app.created_at).toLocaleDateString()}</CardDescription>
+                        <Card key={app.id} className="group overflow-hidden border-muted/60 transition-all duration-300 hover:border-primary/20 hover:shadow-md">
+                            <CardHeader className="bg-muted/5 pb-4 border-b border-muted/50">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium mb-1">
+                                            <span>Application ID: #{app.id.slice(0, 8)}</span>
+                                            <span>•</span>
+                                            <span>{new Date(app.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <CardTitle className="text-xl text-primary font-bold group-hover:text-primary/80 transition-colors">
+                                            {app.job_title || "Job Application"}
+                                        </CardTitle>
                                     </div>
-                                    {getStatusBadge(app.status)}
+                                    <div className="scale-100 transition-transform">
+                                        {getStatusBadge(app.status)}
+                                    </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-6">
                                 {/* Logic for different statuses */}
-                                {app.status === 'shortlisted' && (
-                                    <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900 p-4 rounded-md space-y-3">
-                                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
-                                            <CheckCircle className="h-5 w-5" />
-                                            Congratulations! You've been shortlisted.
+                                {app.status === 'shortlisted' ? (
+                                    <div className="bg-green-50/50 dark:bg-green-900/10 border border-green-200/60 dark:border-green-900 rounded-lg p-6 space-y-4 animate-in slide-in-from-top-1 duration-300">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400 shrink-0">
+                                                <CheckCircle className="h-6 w-6" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h4 className="font-semibold text-green-800 dark:text-green-300 text-lg">Congratulations! You've been shortlisted.</h4>
+                                                <p className="text-muted-foreground">
+                                                    Your profile stood out to us. The next step is a skills assessment to evaluate your fit for the role.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="pl-[52px]">
+                                            <Button asChild size="lg" className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/10 hover:shadow-green-900/20 transition-all">
+                                                <a href={ASSESSMENT_LINK} target="_blank" rel="noopener noreferrer">
+                                                    Start Assessment <ExternalLink className="h-4 w-4" />
+                                                </a>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : app.status === 'rejected' && app.feedback ? (
+                                    <div className="bg-red-50/50 dark:bg-red-900/10 border border-red-200/60 dark:border-red-900 rounded-lg p-6 space-y-4">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 shrink-0">
+                                                <AlertCircle className="h-6 w-6" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h4 className="font-semibold text-red-800 dark:text-red-300 text-lg">Status Update</h4>
+                                                <p className="text-muted-foreground">
+                                                    Thank you for your interest. Unfortunately, we have decided not to move forward with your application at this time.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="pl-[52px] mt-2">
+                                            <div className="bg-background rounded-md border p-4 text-sm text-muted-foreground shadow-sm">
+                                                <span className="font-semibold text-foreground block mb-1 text-xs uppercase tracking-wider">Hiring Manager Feedback</span>
+                                                "{app.feedback}"
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-4 py-2 text-muted-foreground">
+                                        <div className="p-2 bg-muted rounded-full">
+                                            <Clock className="h-5 w-5" />
                                         </div>
                                         <p className="text-sm">
-                                            The next step is to complete our skill assessment. Please click the link below to proceed.
+                                            Your application is currently <span className="font-medium text-foreground">under review</span>. We will notify you here once there is an update.
                                         </p>
-                                        <Button asChild className="gap-2 bg-green-600 hover:bg-green-700 text-white">
-                                            <a href={ASSESSMENT_LINK} target="_blank" rel="noopener noreferrer">
-                                                Take Assessment <ExternalLink className="h-4 w-4" />
-                                            </a>
-                                        </Button>
                                     </div>
-                                )}
-
-                                {app.status === 'rejected' && app.feedback && (
-                                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900 p-4 rounded-md space-y-2">
-                                        <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-semibold">
-                                            <AlertCircle className="h-5 w-5" />
-                                            Update on your application
-                                        </div>
-                                        <p className="text-sm">We appreciate your interest, but we cannot move forward with your application at this time.</p>
-                                        <div className="mt-2">
-                                            <span className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Feedback</span>
-                                            <p className="text-sm mt-1 p-2 bg-white dark:bg-slate-950 rounded border">{app.feedback}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {(app.status === 'submitted' || app.status === 'reviewing') && (
-                                    <p className="text-sm text-muted-foreground">Your application is currently being reviewed by our team. We will update you here once a decision is made.</p>
                                 )}
                             </CardContent>
                         </Card>
