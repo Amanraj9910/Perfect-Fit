@@ -50,6 +50,35 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     }
 }
 
+// Fetch without auth for public endpoints
+async function fetchPublic(endpoint: string) {
+    const startTime = performance.now()
+    const url = `${API_BASE_URL}${endpoint}`
+
+    logApiRequest('GET', endpoint)
+
+    try {
+        const response = await fetch(url)
+        const durationMs = performance.now() - startTime
+
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}))
+            logApiError('GET', endpoint, `HTTP ${response.status}`, errorBody)
+            throw new Error(errorBody.detail || `API Error: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        logApiResponse('GET', endpoint, response.status, durationMs)
+
+        return data
+    } catch (error) {
+        if (error instanceof Error) {
+            logApiError('GET', endpoint, error)
+        }
+        throw error
+    }
+}
+
 export const adminApi = {
     getStats: () => fetchWithAuth('/admin/stats'),
 
@@ -106,3 +135,130 @@ export const adminApi = {
         fetchWithAuth(`/admin/assessments/${assessmentId}/audio/${responseId}`)
 }
 
+// ============================================
+// Jobs API
+// ============================================
+
+export interface JobRoleInput {
+    title: string
+    department: string
+    description: string
+    requirements: string
+}
+
+export interface JobRoleUpdate {
+    title?: string
+    department?: string
+    description?: string
+    requirements?: string
+}
+
+export interface JobRole {
+    id: string
+    title: string
+    department: string
+    description: string
+    requirements: string
+    status: 'pending' | 'approved' | 'rejected'
+    is_open: boolean
+    created_by?: string
+    created_at: string
+    approved_by?: string
+    approved_at?: string
+    rejection_reason?: string
+}
+
+export interface ApplicationInput {
+    cover_letter?: string
+    resume_url?: string
+    phone?: string
+    linkedin_url?: string
+}
+
+export interface JobApplication {
+    id: string
+    job_id: string
+    applicant_id: string
+    status: 'submitted' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired'
+    cover_letter?: string
+    resume_url?: string
+    phone?: string
+    linkedin_url?: string
+    created_at: string
+    profiles?: {
+        full_name?: string
+        email?: string
+    }
+}
+
+export const jobsApi = {
+    // Create a new job role (employee/admin)
+    create: (data: JobRoleInput): Promise<JobRole> =>
+        fetchWithAuth('/api/jobs', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        }),
+
+    // List job roles (employees see own, admins see all)
+    list: (): Promise<JobRole[]> =>
+        fetchWithAuth('/api/jobs'),
+
+    // List pending jobs for approval (hr/admin)
+    listPending: (): Promise<JobRole[]> =>
+        fetchWithAuth('/api/jobs/pending'),
+
+    // List public jobs (no auth required)
+    listPublic: (): Promise<JobRole[]> =>
+        fetchPublic('/api/jobs/public'),
+
+    // Get job details
+    get: (id: string): Promise<JobRole> =>
+        fetchWithAuth(`/api/jobs/${id}`),
+
+    // Update job (owner/admin)
+    update: (id: string, data: JobRoleUpdate): Promise<JobRole> =>
+        fetchWithAuth(`/api/jobs/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        }),
+
+    // Delete job (owner/admin)
+    delete: (id: string): Promise<void> =>
+        fetchWithAuth(`/api/jobs/${id}`, {
+            method: 'DELETE'
+        }),
+
+    // Approve job (hr/admin)
+    approve: (id: string): Promise<JobRole> =>
+        fetchWithAuth(`/api/jobs/${id}/approve`, {
+            method: 'PATCH'
+        }),
+
+    // Reject job with reason (hr/admin)
+    reject: (id: string, reason: string): Promise<JobRole> =>
+        fetchWithAuth(`/api/jobs/${id}/reject`, {
+            method: 'PATCH',
+            body: JSON.stringify({ reason })
+        }),
+
+    // Close job (hr/admin)
+    close: (id: string): Promise<JobRole> =>
+        fetchWithAuth(`/api/jobs/${id}/close`, {
+            method: 'PATCH'
+        }),
+
+    // Apply for job (any authenticated user)
+    apply: (id: string, data: ApplicationInput): Promise<JobApplication> =>
+        fetchWithAuth(`/api/jobs/${id}/apply`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        }),
+
+    // List applications for a job (hr/admin)
+    listApplications: (id: string): Promise<JobApplication[]> =>
+        fetchWithAuth(`/api/jobs/${id}/applications`),
+
+    // Get approval history (hr/admin)
+    getApprovalHistory: (id: string) =>
+        fetchWithAuth(`/api/jobs/${id}/approvals`)
+}

@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Shield, Loader2, LogOut, LayoutDashboard, Users, FileText } from 'lucide-react'
+import { Shield, Loader2, LogOut, LayoutDashboard, Users, FileText, Briefcase } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import AdminUserList from '@/components/admin/AdminUserList'
 import AdminAssessmentList from '@/components/admin/AdminAssessmentList'
+import AdminJobApprovals from '@/components/admin/AdminJobApprovals'
 
 export default function AdminPage() {
     const router = useRouter()
@@ -83,7 +84,7 @@ export default function AdminPage() {
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
                 <Tabs defaultValue="dashboard" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+                    <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
                         </TabsTrigger>
@@ -92,6 +93,9 @@ export default function AdminPage() {
                         </TabsTrigger>
                         <TabsTrigger value="assessments">
                             <FileText className="h-4 w-4 mr-2" /> Assessments
+                        </TabsTrigger>
+                        <TabsTrigger value="jobs">
+                            <Briefcase className="h-4 w-4 mr-2" /> Jobs
                         </TabsTrigger>
                     </TabsList>
 
@@ -105,6 +109,10 @@ export default function AdminPage() {
 
                     <TabsContent value="assessments" className="space-y-4">
                         <AdminAssessmentList />
+                    </TabsContent>
+
+                    <TabsContent value="jobs" className="space-y-4">
+                        <AdminJobApprovals />
                     </TabsContent>
                 </Tabs>
             </main>

@@ -260,7 +260,43 @@ export default function Home() {
                     </div>
                 </section>
 
-                {/* 5. Dual CTA */}
+                {/* 5. Open Positions */}
+                <section className="container py-16 sm:py-24 px-4 sm:px-8">
+                    <div className="text-center mb-12 space-y-4">
+                        <Badge variant="secondary" className="px-4 py-1.5 text-sm font-normal">
+                            We're Hiring
+                        </Badge>
+                        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight md:text-4xl">Open Positions</h2>
+                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                            Join our team and help shape the future of fair hiring.
+                        </p>
+                    </div>
+
+                    <div className="max-w-3xl mx-auto space-y-4">
+                        {/* This is a static preview - for dynamic content, convert to client component */}
+                        <Card className="hover:shadow-md transition-shadow">
+                            <CardContent className="p-6 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                        <Briefcase className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold">View All Open Positions</p>
+                                        <p className="text-sm text-muted-foreground">Browse our full list of opportunities</p>
+                                    </div>
+                                </div>
+                                <Link href="/careers">
+                                    <Button>
+                                        Explore Careers
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </section>
+
+                {/* 6. Dual CTA */}
                 <section className="container py-16 sm:py-24 px-4 sm:px-8">
                     <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
                         <Card className="bg-primary text-primary-foreground border-none">

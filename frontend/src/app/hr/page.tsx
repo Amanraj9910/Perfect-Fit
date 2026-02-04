@@ -11,6 +11,7 @@ import { adminApi } from '@/lib/api'
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import AdminUserList from '@/components/admin/AdminUserList'
 import AdminAssessmentList from '@/components/admin/AdminAssessmentList'
+import AdminJobApprovals from '@/components/admin/AdminJobApprovals'
 
 export default function HRPage() {
     const router = useRouter()
@@ -87,7 +88,7 @@ export default function HRPage() {
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
                 <Tabs defaultValue="dashboard" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+                    <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
                         </TabsTrigger>
@@ -97,6 +98,9 @@ export default function HRPage() {
                         <TabsTrigger value="assessments">
                             <FileText className="h-4 w-4 mr-2" /> Assessments
                         </TabsTrigger>
+                        <TabsTrigger value="jobs">
+                            <Briefcase className="h-4 w-4 mr-2" /> Jobs
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="dashboard" className="space-y-4">
@@ -104,17 +108,15 @@ export default function HRPage() {
                     </TabsContent>
 
                     <TabsContent value="users" className="space-y-4">
-                        {/* 
-                            Reusing AdminUserList but note that it allows editing roles. 
-                            HR might shouldn't change Admins' roles? 
-                            The backend might need to enforce that.
-                            For now, reusing as valid for "HR Panel" request.
-                        */}
                         <AdminUserList />
                     </TabsContent>
 
                     <TabsContent value="assessments" className="space-y-4">
                         <AdminAssessmentList />
+                    </TabsContent>
+
+                    <TabsContent value="jobs" className="space-y-4">
+                        <AdminJobApprovals />
                     </TabsContent>
                 </Tabs>
             </main>
