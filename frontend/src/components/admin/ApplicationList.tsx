@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { applicationsApi, JobApplication } from '@/lib/api'
-import { CheckCircle, XCircle, FileText, ExternalLink, Loader2 } from 'lucide-react'
+import { XCircle, FileText, ExternalLink, Loader2 } from 'lucide-react'
 
 export default function ApplicationList() {
     const [applications, setApplications] = useState<JobApplication[]>([])
@@ -12,30 +12,30 @@ export default function ApplicationList() {
     const [feedback, setFeedback] = useState('')
     const [actionLoading, setActionLoading] = useState(false)
 
-    useEffect(() => {
-        fetchApplications()
-    }, [])
-
-    const fetchApplications = async () => {
+    const fetchApplications = useCallback(async () => {
         try {
             setLoading(true)
             const data = await applicationsApi.listAll()
-            setApplications(data)
+            setApplications(Array.isArray(data) ? data : [])
         } catch (err) {
             setError('Failed to load applications')
             console.error(err)
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
-    const handleStatusUpdate = async (id: string, status: string) => {
+    useEffect(() => {
+        fetchApplications()
+    }, [fetchApplications])
+
+    const handleStatusUpdate = async (id: string, status: JobApplication['status']) => {
         try {
             setActionLoading(true)
             await applicationsApi.updateStatus(id, status, feedback)
             // Optimistic update
             setApplications(apps => apps.map(app =>
-                app.id === id ? { ...app, status: status as any } : app
+                app.id === id ? { ...app, status } : app
             ))
             setSelectedApp(null)
             setFeedback('')
@@ -84,7 +84,9 @@ export default function ApplicationList() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {new Date(app.created_at).toLocaleDateString()}
+                                    {app.created_at && !Number.isNaN(Date.parse(app.created_at))
+                                        ? new Date(app.created_at).toLocaleDateString()
+                                        : "Unknown"}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <button

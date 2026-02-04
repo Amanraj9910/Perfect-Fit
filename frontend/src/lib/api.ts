@@ -187,6 +187,7 @@ export interface JobApplication {
     created_at: string
     feedback?: string
     // Enriched fields from backend
+    job_title?: string
     candidate_name?: string
     candidate_email?: string
     candidate_avatar?: string

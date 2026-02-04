@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, Clock, ExternalLink, MessageSquare, Loader2, FileText } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { CheckCircle, XCircle, ExternalLink, Loader2, FileText } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,30 +28,33 @@ export default function AdminApplicationsList() {
     const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
     const [feedback, setFeedback] = useState("")
 
-    useEffect(() => {
-        fetchApplications()
-    }, [user])
-
-    const fetchApplications = async () => {
-        if (!user) return;
+    const fetchApplications = useCallback(async () => {
+        if (!user) {
+            setLoading(false)
+            return
+        }
         setLoading(true)
         try {
             const data = await applicationsApi.listAll()
-            setApplications(data);
+            setApplications(Array.isArray(data) ? data : [])
         } catch (err) {
             console.error(err)
         } finally {
             setLoading(false)
         }
-    }
+    }, [user])
 
-    const updateStatus = async (appId: string, status: string, feedbackText?: string) => {
+    useEffect(() => {
+        fetchApplications()
+    }, [fetchApplications])
+
+    const updateStatus = async (appId: string, status: JobApplication['status'], feedbackText?: string) => {
         setProcessingId(appId)
         try {
             await applicationsApi.updateStatus(appId, status, feedbackText)
 
             // Update local state
-            setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: status as any, feedback: feedbackText } : a));
+            setApplications(apps => apps.map(a => a.id === appId ? { ...a, status, feedback: feedbackText } : a));
         } catch (error) {
             console.error(error);
             alert("Failed to update status");
@@ -106,9 +109,13 @@ export default function AdminApplicationsList() {
                                         <CardTitle className="text-base font-semibold">{app.candidate_name || "Candidate"}</CardTitle>
                                         <CardDescription className="text-sm">{app.job_title}</CardDescription>
                                         <div className="mt-1 text-xs text-muted-foreground flex gap-2">
-                                            <span>Applied: {new Date(app.created_at).toLocaleDateString()}</span>
-                                            {app.phone && <span>• {app.phone}</span>}
-                                            {app.candidate_email && <span>• {app.candidate_email}</span>}
+                                            <span>
+                                                Applied: {app.created_at && !Number.isNaN(Date.parse(app.created_at))
+                                                    ? new Date(app.created_at).toLocaleDateString()
+                                                    : "Unknown"}
+                                            </span>
+                                            {app.phone && <span>- {app.phone}</span>}
+                                            {app.candidate_email && <span>- {app.candidate_email}</span>}
                                         </div>
                                     </div>
                                 </div>

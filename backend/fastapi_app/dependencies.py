@@ -92,7 +92,11 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
             )
         
         auth_logger.info(f"Admin access granted for user: {user_id} (role: {profile.data.get('role')})")
-        return user_response.user
+        return {
+            "id": str(user_id),
+            "email": user_response.user.email,
+            "role": profile.data.get("role")
+        }
         
     except HTTPException:
         raise

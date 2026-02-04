@@ -148,37 +148,48 @@ async def list_all_applications(
     try:
         # Fetch applications with Job details
         result = await supabase.table("job_applications").select("*, job_roles(title)").order("created_at", desc=True).execute()
-        
+
         apps = []
-        if result.data:
-            # Collect all applicant IDs to fetch profiles in bulk
-            applicant_ids = [item["applicant_id"] for item in result.data]
-            
-            # Fetch profiles
-            profiles_map = {}
-            if applicant_ids:
+        if not result.data:
+            return apps
+
+        # Collect all applicant IDs to fetch profiles in bulk (filter invalid/empty)
+        applicant_ids = [
+            item.get("applicant_id")
+            for item in result.data
+            if item.get("applicant_id")
+        ]
+
+        # Fetch profiles (best-effort: don't fail the whole request if this errors)
+        profiles_map = {}
+        if applicant_ids:
+            try:
                 p_result = await supabase.table("candidate_profiles").select("id, full_name, email").in_("id", applicant_ids).execute()
                 if p_result.data:
                     for p in p_result.data:
                         profiles_map[p["id"]] = p
-            
-            for item in result.data:
-                # Enrich with job title
-                job = item.get("job_roles")
-                if job and isinstance(job, dict):
-                    item["job_title"] = job.get("title")
-                
-                # Enrich with candidate details
-                profile = profiles_map.get(item["applicant_id"])
-                if profile:
-                    item["candidate_name"] = profile.get("full_name")
-                    item["candidate_email"] = profile.get("email")
-                else:
-                    item["candidate_name"] = "Unknown"
-                    item["candidate_email"] = ""
-                
-                apps.append(item)
-        
+            except Exception as e:
+                log_error(e, context="list_all_applications:profile_lookup")
+
+        for item in result.data:
+            # Enrich with job title
+            job = item.get("job_roles")
+            if job and isinstance(job, dict):
+                item["job_title"] = job.get("title")
+            elif job and isinstance(job, list) and len(job) > 0:
+                item["job_title"] = job[0].get("title")
+
+            # Enrich with candidate details
+            profile = profiles_map.get(item.get("applicant_id"))
+            if profile:
+                item["candidate_name"] = profile.get("full_name")
+                item["candidate_email"] = profile.get("email")
+            else:
+                item["candidate_name"] = "Unknown"
+                item["candidate_email"] = ""
+
+            apps.append(item)
+
         return apps
 
     except Exception as e:
