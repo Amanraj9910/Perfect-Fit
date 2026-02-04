@@ -146,32 +146,44 @@ async def list_all_applications(
     api_logger.info(f"Listing all applications for admin: {user['id']}")
     
     try:
-        # Join with candidate profile and job title
-        # select(*, job_roles(title), candidate_profiles(full_name, email))
-        # Note: relation names depend on FK naming. Assuming default or explicitly doing manual join if needed.
-        # Let's try broad select.
-        
+        # Fetch applications with Job details
         result = await supabase.table("job_applications").select("*, job_roles(title)").order("created_at", desc=True).execute()
-        
-        # We might also want candidate details. 
-        # Since `applicant_id` is the user id, and `candidate_profiles` is keyed by user id.
-        # We can fetch profiles separately or rely on join if `candidate_profiles` FK exists on `applicant_id`?
-        # The schema uses `applicant_id` references `auth.users`. `candidate_profiles` also references `auth.users`.
-        # Direct join might be tricky without explicit FK between `job_applications.applicant_id` and `candidate_profiles.id`.
-        # But they are same ID. 
-        # Let's fetch basic info first. Frontend can fetch profile details by ID if needed.
         
         apps = []
         if result.data:
-             for item in result.data:
-                 job = item.get("job_roles")
-                 if job and isinstance(job, dict):
-                     item["job_title"] = job.get("title")
-                 apps.append(item)
+            # Collect all applicant IDs to fetch profiles in bulk
+            applicant_ids = [item["applicant_id"] for item in result.data]
+            
+            # Fetch profiles
+            profiles_map = {}
+            if applicant_ids:
+                p_result = await supabase.table("candidate_profiles").select("id, full_name, email").in_("id", applicant_ids).execute()
+                if p_result.data:
+                    for p in p_result.data:
+                        profiles_map[p["id"]] = p
+            
+            for item in result.data:
+                # Enrich with job title
+                job = item.get("job_roles")
+                if job and isinstance(job, dict):
+                    item["job_title"] = job.get("title")
+                
+                # Enrich with candidate details
+                profile = profiles_map.get(item["applicant_id"])
+                if profile:
+                    item["candidate_name"] = profile.get("full_name")
+                    item["candidate_email"] = profile.get("email")
+                else:
+                    item["candidate_name"] = "Unknown"
+                    item["candidate_email"] = ""
+                
+                apps.append(item)
         
         return apps
 
     except Exception as e:
+        # log_error(e, context="list_all_applications") # Assuming log_error is available or imported. Using print/logger if not sure.
+        # It was imported.
         log_error(e, context="list_all_applications")
         raise HTTPException(status_code=500, detail="Failed to fetch applications")
 
@@ -191,23 +203,8 @@ async def update_application_status(
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Store feedback if provided (assuming we added a feedback column or reuse cover_letter? No, we should have a feedback column)
-        # The user requested "feedback" field in the migration plan, but `job_applications` schema provided by user didn't explicitly show it.
-        # Wait, the user provided schema in step 29: `job_applications` has `status`, `cover_letter`... but NO `feedback` column.
-        # I should added `feedback` column in migration? 
-        # I MISSED adding `feedback` column to `job_applications` in previous turn!
-        # The user's schema provided in Stpe 29 did NOT have feedback.
-        # BUT I said I would add it in my plan.
-        # Check `migration_candidate_flow.sql` again.
-        # It created `candidate_profiles`. It did NOT alter `job_applications`.
-        # I need to ADD `feedback` column to `job_applications`.
-        
-        # I will handle this in this tool call or next. 
-        # Let's add the code to update it assuming column exists, BUT I MUST run migration to add it.
-        
+        # Add feedback if provided
         if update.feedback:
-             # Check if column exists or put it in a metadata field? 
-             # Better to add the column.
              data["feedback"] = update.feedback
              
         result = await supabase.table("job_applications").update(data).eq("id", app_id).execute()
@@ -219,5 +216,4 @@ async def update_application_status(
 
     except Exception as e:
         log_error(e, context="update_application_status")
-        # If feedback column error, we might catch it here.
         raise HTTPException(status_code=500, detail="Failed to update application")

@@ -97,42 +97,53 @@ export default function ProfilePage() {
             }
         }
 
-        // Actually, let's just use Supabase client directly in client component for data fetching to be fast and reliable
-        // effectively `GET /candidates/me` logic but client-side.
-        // BUT we need to upload files via Backend to use the Azure logic we wrote.
-
-        // Let's FETCH data from Supabase directly for speed/simplicity in this component
-        // and UPLOAD via backend API (or direct if we had SAS). We wrote backend upload.
-
         async function loadData() {
             if (!user) return;
             setIsLoading(true);
-            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
 
-            const { data, error } = await supabase
-                .from("candidate_profiles")
-                .select("*")
-                .eq("id", user.id)
-                .single();
+            try {
+                // Get auth session token
+                const supabase = (await import("@/lib/supabase")).getSupabaseClient();
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
 
-            if (data) {
-                form.reset({
-                    full_name: data.full_name || authProfile?.full_name || "",
-                    phone: data.phone || "",
-                    linkedin_url: data.linkedin_url || "",
-                    portfolio_url: data.portfolio_url || "",
-                    bio: data.bio || "",
-                    experience_years: data.experience_years || 0,
+                if (!token) {
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Fetch from Backend API to get Signed URLs (SAS Tokens)
+                const response = await fetch("http://localhost:8000/api/candidates/me", {
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "X-Supabase-Auth": token
+                    }
                 });
-                setResumeUrl(data.resume_url);
-                setProfilePicUrl(data.profile_pic_url);
-            } else {
-                // defaults
-                form.reset({
-                    full_name: authProfile?.full_name || "",
-                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    form.reset({
+                        full_name: data.full_name || authProfile?.full_name || "",
+                        phone: data.phone || "",
+                        linkedin_url: data.linkedin_url || "",
+                        portfolio_url: data.portfolio_url || "",
+                        bio: data.bio || "",
+                        experience_years: data.experience_years || 0,
+                    });
+                    setResumeUrl(data.resume_url);
+                    setProfilePicUrl(data.profile_pic_url);
+                } else {
+                    // Fallback to auth profile if backend fetch fails (e.g. first time user)
+                    form.reset({
+                        full_name: authProfile?.full_name || "",
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load profile", error);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         }
 
         loadData();

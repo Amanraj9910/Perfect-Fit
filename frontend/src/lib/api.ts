@@ -185,10 +185,11 @@ export interface JobApplication {
     phone?: string
     linkedin_url?: string
     created_at: string
-    profiles?: {
-        full_name?: string
-        email?: string
-    }
+    feedback?: string
+    // Enriched fields from backend
+    candidate_name?: string
+    candidate_email?: string
+    candidate_avatar?: string
 }
 
 export const jobsApi = {
@@ -261,4 +262,16 @@ export const jobsApi = {
     // Get approval history (hr/admin)
     getApprovalHistory: (id: string) =>
         fetchWithAuth(`/api/jobs/${id}/approvals`)
+}
+
+export const applicationsApi = {
+    // List all applications (hr/admin)
+    listAll: (): Promise<JobApplication[]> => fetchWithAuth('/api/applications'),
+
+    // Update application status
+    updateStatus: (id: string, status: string, feedback?: string) =>
+        fetchWithAuth(`/api/applications/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, feedback })
+        })
 }

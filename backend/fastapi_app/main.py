@@ -27,11 +27,13 @@ setup_logging()
 app = FastAPI(title="Perfect Fit Admin API")
 
 # CORS Configuration
+# Note: When allow_credentials=True, "*" is not allowed for allow_origins.
+# Use explicit origins (comma-separated) via CORS_ALLOW_ORIGINS env var.
+default_origins = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
 origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "*", # Allow all for development, restrict in production
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOW_ORIGINS", default_origins).split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(

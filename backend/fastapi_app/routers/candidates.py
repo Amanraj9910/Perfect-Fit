@@ -19,6 +19,9 @@ from azure.core.exceptions import ResourceExistsError
 from dependencies import get_supabase, CustomSupabaseClient, get_user_with_role
 from core.logging import api_logger, db_logger, log_error
 
+from datetime import datetime, timedelta
+from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+
 router = APIRouter()
 
 # ============================================
@@ -53,35 +56,118 @@ class CandidateProfileResponse(BaseModel):
 # Azure Blob Storage Helper
 # ============================================
 
-async def upload_to_azure_blob(file: UploadFile, container_name: str) -> str:
-    """Uploads a file to Azure Blob Storage and returns the public URL."""
+
+# ============================================
+# Azure Blob Storage Helper
+# ============================================
+
+def get_blob_service_client():
     connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
     if not connect_str:
         raise ValueError("AZURE_STORAGE_CONNECTION_STRING not set")
+    return BlobServiceClient.from_connection_string(connect_str)
 
-    # Generate unique filename to avoid collisions
+def sign_blob_url(blob_url: str) -> str:
+    """
+    Appends a SAS token to the blob URL to allow secure read access.
+    """
+    if not blob_url:
+        return blob_url
+        
+    try:
+        connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+        if not connect_str:
+            api_logger.warning("AZURE_STORAGE_CONNECTION_STRING not set, cannot sign URL")
+            return blob_url
+
+        # Parse connection string to get account name and key
+        params = dict(item.split('=', 1) for item in connect_str.split(';') if '=' in item)
+        account_name = params.get('AccountName')
+        account_key = params.get('AccountKey')
+
+        if not account_name or not account_key:
+             api_logger.warning("Could not parse AccountName or AccountKey from connection string")
+             return blob_url
+
+        # Extract container and blob name from URL
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(blob_url)
+            path_parts = parsed.path.lstrip('/').split('/', 1)
+            if len(path_parts) != 2:
+                return blob_url
+            
+            container_name, blob_name = path_parts
+        except Exception:
+            return blob_url
+
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=container_name,
+            blob_name=blob_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=datetime.utcnow() + timedelta(hours=1)
+        )
+        
+        return f"{blob_url}?{sas_token}"
+        
+    except Exception as e:
+        log_error(e, context="sign_blob_url")
+        return blob_url
+
+async def delete_blob_from_url(blob_url: str):
+    """Deletes a blob given its full URL."""
+    if not blob_url:
+        return
+
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(blob_url)
+        path_parts = parsed.path.lstrip('/').split('/', 1)
+        if len(path_parts) != 2:
+            return
+        
+        container_name, blob_name = path_parts
+        
+        # We need to handle potential SAS tokens in the URL if passed back? 
+        # But usually we store the clean URL in DB. 
+        # Check if query params exist and strip them just in case.
+        if '?' in blob_name:
+            blob_name = blob_name.split('?')[0]
+
+        blob_service_client = get_blob_service_client()
+        async with blob_service_client:
+            container_client = blob_service_client.get_container_client(container_name)
+            blob_client = container_client.get_blob_client(blob_name)
+            await blob_client.delete_blob()
+            api_logger.info(f"Deleted old blob: {blob_name}")
+            
+    except Exception as e:
+        # Log but don't fail the request if deletion fails
+        log_error(e, context="delete_blob_from_url")
+
+async def upload_to_azure_blob(file: UploadFile, container_name: str) -> str:
+    """Uploads a file to Azure Blob Storage and returns the public URL."""
+    # Generate unique filename
     filename = f"{uuid.uuid4()}-{file.filename}"
     
     try:
-        blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-        async with blob_service_client: # Context manager for async client
+        blob_service_client = get_blob_service_client()
+        async with blob_service_client:
             container_client = blob_service_client.get_container_client(container_name)
             
-            # Create container if not exists (though user said it exists)
             try:
                 await container_client.create_container()
             except ResourceExistsError:
                 pass
-            except Exception as e:
-                # If we rely on public access, container permissions matter.
-                # Assuming user set it up correctly or we don't care about creates.
+            except Exception:
                 pass
 
             blob_client = container_client.get_blob_client(filename)
             file_content = await file.read()
             await blob_client.upload_blob(file_content, overwrite=True)
             
-            # Return URL
             return blob_client.url
             
     except Exception as e:
@@ -91,7 +177,7 @@ async def upload_to_azure_blob(file: UploadFile, container_name: str) -> str:
             detail="Failed to upload file to storage"
         )
     finally:
-        await file.seek(0) # Reset file pointer just in case
+        await file.seek(0)
 
 # ============================================
 # Endpoints
@@ -106,15 +192,17 @@ async def get_my_profile(
     api_logger.info(f"Fetching profile for user: {user['id']}")
     
     try:
-        # Try to get candidate profile
         result = await supabase.table("candidate_profiles").select("*").eq("id", user["id"]).single().execute()
         
         if result.data:
-            return result.data
+            profile = result.data
+            # Sign the URLs before returning
+            if profile.get('resume_url'):
+                profile['resume_url'] = sign_blob_url(profile['resume_url'])
+            if profile.get('profile_pic_url'):
+                profile['profile_pic_url'] = sign_blob_url(profile['profile_pic_url'])
+            return profile
         
-        # If not found, create a basic one from auth info?
-        # Or return empty/partial?
-        # Let's create a default entry if it doesn't exist for better UX
         api_logger.info(f"Creating default candidate profile for: {user['id']}")
         
         new_profile = {
@@ -151,22 +239,29 @@ async def update_my_profile(
     try:
         update_dict = {k: v for k, v in updates.dict().items() if v is not None}
         
-        # Ensure profile exists first (via upsert or check)
-        # Using upsert logic
         update_dict["id"] = user["id"]
-        update_dict["email"] = user.get("email") # Ensure email is kept/set
+        update_dict["email"] = user.get("email")
         
         result = await supabase.table("candidate_profiles").upsert(update_dict).execute()
         
         if not result.data:
-            # If nothing returned, maybe fetch it
             fetch = await supabase.table("candidate_profiles").select("*").eq("id", user["id"]).single().execute()
             if fetch.data:
-                return fetch.data
+                profile = fetch.data
+                if profile.get('resume_url'):
+                    profile['resume_url'] = sign_blob_url(profile['resume_url'])
+                if profile.get('profile_pic_url'):
+                    profile['profile_pic_url'] = sign_blob_url(profile['profile_pic_url'])
+                return profile
                 
             raise HTTPException(status_code=500, detail="Update failed")
             
-        return result.data[0]
+        profile = result.data[0]
+        if profile.get('resume_url'):
+            profile['resume_url'] = sign_blob_url(profile['resume_url'])
+        if profile.get('profile_pic_url'):
+            profile['profile_pic_url'] = sign_blob_url(profile['profile_pic_url'])
+        return profile
 
     except Exception as e:
         log_error(e, context="update_my_profile")
@@ -190,16 +285,21 @@ async def upload_resume(
     container = os.environ.get("AZURE_PROFILE_STORAGE_CONTAINER_NAME", "candidate-details")
     
     try:
+        # Check for existing resume to delete? 
+        # Optional enhancement: delete old resume
+        current = await supabase.table("candidate_profiles").select("resume_url").eq("id", user["id"]).single().execute()
+        if current.data and current.data.get("resume_url"):
+            await delete_blob_from_url(current.data["resume_url"])
+
         file_url = await upload_to_azure_blob(file, container)
         
-        # Update profile
         await supabase.table("candidate_profiles").upsert({
             "id": user["id"],
             "resume_url": file_url,
-            "email": user.get("email") # Required for upsert if row missing
+            "email": user.get("email")
         }).execute()
         
-        return {"url": file_url}
+        return {"url": sign_blob_url(file_url)}
         
     except HTTPException:
         raise
@@ -222,16 +322,30 @@ async def upload_picture(
     container = os.environ.get("AZURE_PROFILE_STORAGE_CONTAINER_NAME", "candidate-details")
     
     try:
+        # 1. Fetch current profile to get old picture URL
+        current = await supabase.table("candidate_profiles").select("profile_pic_url").eq("id", user["id"]).single().execute()
+        
+        # 2. Delete old blob if it exists
+        if current.data and current.data.get("profile_pic_url"):
+            await delete_blob_from_url(current.data["profile_pic_url"])
+
+        # 3. Upload new blob
         file_url = await upload_to_azure_blob(file, container)
         
-        # Update profile
+        # 4. Update 'candidate_profiles'
         await supabase.table("candidate_profiles").upsert({
             "id": user["id"],
             "profile_pic_url": file_url,
             "email": user.get("email")
         }).execute()
+
+        # 5. Update 'profiles' table (Auth/Navbar sync)
+        # Note: profiles table uses 'avatar_url'
+        await supabase.table("profiles").update({
+            "avatar_url": file_url
+        }).eq("id", user["id"]).execute()
         
-        return {"url": file_url}
+        return {"url": sign_blob_url(file_url)}
         
     except HTTPException:
         raise

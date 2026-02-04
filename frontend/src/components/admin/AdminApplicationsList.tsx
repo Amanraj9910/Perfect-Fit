@@ -16,27 +16,11 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/auth-provider'
-
-interface Application {
-    id: string
-    job_id: string
-    applicant_id: string
-    job_title: string
-    status: string
-    cover_letter: string
-    resume_url: string
-    phone?: string
-    linkedin_url?: string
-    created_at: string
-    // Enriched fields
-    candidate_name?: string
-    candidate_email?: string
-    candidate_avatar?: string
-}
+import { applicationsApi, JobApplication } from '@/lib/api'
 
 export default function AdminApplicationsList() {
     const { user } = useAuth();
-    const [applications, setApplications] = useState<Application[]>([])
+    const [applications, setApplications] = useState<JobApplication[]>([])
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState<string | null>(null)
 
@@ -52,63 +36,8 @@ export default function AdminApplicationsList() {
         if (!user) return;
         setLoading(true)
         try {
-            // In a real app we might fetch these from our backend API which joins data
-            // We implemented GET /api/applications which returns apps + job_title
-            // But it doesn't return candidate name/email yet (comment in code said "fetch profile separately").
-            // For MVP, we can fetch apps, then fetch profile for each if needed, or rely on what's available.
-            // Or update backend to join.
-
-            // Let's use the backend endpoint we made.
-            const token = (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
-
-            const res = await fetch("http://localhost:8000/api/applications", {
-                headers: {
-                    "X-Supabase-Auth": (await token) || ""
-                }
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                // We need candidate details. 
-                // We can fetch them or assume backend provides them if updated.
-                // Currently backend only provides job_title.
-                // Let's fetch candidate profiles client side for now to be fast.
-                // Or just show ID? User wants "see all details of candidate".
-
-                // Enrich with profile data
-                const supabase = (await import("@/lib/supabase")).getSupabaseClient();
-
-                const enriched = await Promise.all(data.map(async (app: any) => {
-                    // Fetch profile for applicant_id
-                    const { data: profile } = await supabase.from('candidate_profiles').select('full_name, email, profile_pic_url').eq('id', app.applicant_id).single();
-                    // If not in candidate_profiles, try generic profiles
-                    let name = "Unknown Candidate";
-                    let email = "";
-                    let avatar = "";
-
-                    if (profile) {
-                        name = profile.full_name;
-                        email = profile.email;
-                        avatar = profile.profile_pic_url;
-                    } else {
-                        const { data: userProfile } = await supabase.from('profiles').select('full_name, email, avatar_url').eq('id', app.applicant_id).single();
-                        if (userProfile) {
-                            name = userProfile.full_name;
-                            email = userProfile.email;
-                            avatar = userProfile.avatar_url;
-                        }
-                    }
-
-                    return {
-                        ...app,
-                        candidate_name: name,
-                        candidate_email: email,
-                        candidate_avatar: avatar
-                    };
-                }));
-
-                setApplications(enriched);
-            }
+            const data = await applicationsApi.listAll()
+            setApplications(data);
         } catch (err) {
             console.error(err)
         } finally {
@@ -119,25 +48,10 @@ export default function AdminApplicationsList() {
     const updateStatus = async (appId: string, status: string, feedbackText?: string) => {
         setProcessingId(appId)
         try {
-            const token = (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
-
-            const res = await fetch(`http://localhost:8000/api/applications/${appId}/status`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Supabase-Auth": (await token) || ""
-                },
-                body: JSON.stringify({
-                    status: status,
-                    feedback: feedbackText
-                })
-            });
-
-            if (!res.ok) throw new Error("Failed to update status");
+            await applicationsApi.updateStatus(appId, status, feedbackText)
 
             // Update local state
-            setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: status, feedback: feedbackText } : a));
-
+            setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: status as any, feedback: feedbackText } : a));
         } catch (error) {
             console.error(error);
             alert("Failed to update status");
@@ -205,7 +119,14 @@ export default function AdminApplicationsList() {
                             <CardContent className="py-2">
                                 {app.cover_letter && (
                                     <div className="text-sm text-muted-foreground mb-3 bg-muted/20 p-3 rounded">
+                                        <span className="font-semibold text-xs block mb-1">Cover Letter:</span>
                                         "{app.cover_letter}"
+                                    </div>
+                                )}
+                                {app.status === 'rejected' && app.feedback && (
+                                    <div className="text-sm text-red-600 mb-3 bg-red-50 p-3 rounded border border-red-100">
+                                        <span className="font-semibold text-xs block mb-1">Feedback:</span>
+                                        "{app.feedback}"
                                     </div>
                                 )}
                                 <div className="flex gap-3 text-sm">

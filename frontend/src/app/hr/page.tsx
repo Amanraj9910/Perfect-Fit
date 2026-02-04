@@ -12,6 +12,7 @@ import AdminDashboard from '@/components/admin/AdminDashboard'
 import AdminUserList from '@/components/admin/AdminUserList'
 import AdminAssessmentList from '@/components/admin/AdminAssessmentList'
 import AdminJobApprovals from '@/components/admin/AdminJobApprovals'
+import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
 
 export default function HRPage() {
     const router = useRouter()
@@ -88,7 +89,7 @@ export default function HRPage() {
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
                 <Tabs defaultValue="dashboard" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
+                    <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
                         </TabsTrigger>
@@ -100,6 +101,9 @@ export default function HRPage() {
                         </TabsTrigger>
                         <TabsTrigger value="jobs">
                             <Briefcase className="h-4 w-4 mr-2" /> Jobs
+                        </TabsTrigger>
+                        <TabsTrigger value="applications">
+                            <FileText className="h-4 w-4 mr-2" /> Applications
                         </TabsTrigger>
                     </TabsList>
 
@@ -117,6 +121,10 @@ export default function HRPage() {
 
                     <TabsContent value="jobs" className="space-y-4">
                         <AdminJobApprovals />
+                    </TabsContent>
+
+                    <TabsContent value="applications" className="space-y-4">
+                        <AdminApplicationsList />
                     </TabsContent>
                 </Tabs>
             </main>
