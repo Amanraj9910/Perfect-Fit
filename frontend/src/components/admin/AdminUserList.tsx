@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { adminApi } from '@/lib/api'
-import { Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react'
+import { uiLogger, logError } from '@/lib/logger'
+import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -10,6 +11,7 @@ import { useDebounce } from '@/lib/use-debounce'
 export default function AdminUserList() {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [searchTerm, setSearchTerm] = useState('')
@@ -18,12 +20,31 @@ export default function AdminUserList() {
 
     const fetchUsers = async () => {
         setLoading(true)
+        setError(null)
+        uiLogger.info('AdminUserList: Fetching users')
+
         try {
             const res = await adminApi.getUsers(page, 10, debouncedSearch)
-            setUsers(res.data || [])
-            setTotalPages(Math.ceil((res.total || 0) / 10))
-        } catch (error) {
-            console.error(error)
+
+            // Handle nested response: { users: [...], total, page, limit }
+            const usersData = res.users || res.data || []
+            const totalCount = res.total || 0
+
+            if (!Array.isArray(usersData)) {
+                uiLogger.error('getUsers returned non-array', res)
+                setUsers([])
+                setError('Invalid data format received')
+                return
+            }
+
+            uiLogger.info(`AdminUserList: Loaded ${usersData.length} users`)
+            setUsers(usersData)
+            setTotalPages(Math.ceil(totalCount / 10) || 1)
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to load users'
+            logError(err instanceof Error ? err : new Error(errorMessage), 'AdminUserList')
+            setError(errorMessage)
+            setUsers([])
         } finally {
             setLoading(false)
         }

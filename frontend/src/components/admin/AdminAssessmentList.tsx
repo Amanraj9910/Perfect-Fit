@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { adminApi } from '@/lib/api'
-import { Loader2, Eye, FileAudio, CheckCircle, Clock } from 'lucide-react'
+import { uiLogger, logError } from '@/lib/logger'
+import { Loader2, Eye, FileAudio, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AssessmentDetail } from './AdminAssessmentDetail'
 import {
@@ -13,15 +14,32 @@ import {
 export default function AdminAssessmentList() {
     const [assessments, setAssessments] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null)
 
     useEffect(() => {
         const fetchAssessments = async () => {
+            uiLogger.info('AdminAssessmentList: Fetching assessments')
+            setError(null)
+
             try {
                 const data = await adminApi.getAssessments()
+
+                // Defensive validation - ensure data is an array
+                if (!Array.isArray(data)) {
+                    uiLogger.error('getAssessments returned non-array', data)
+                    setAssessments([])
+                    setError('Received invalid data format from server')
+                    return
+                }
+
+                uiLogger.info(`AdminAssessmentList: Loaded ${data.length} assessments`)
                 setAssessments(data)
-            } catch (error) {
-                console.error(error)
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to load assessments'
+                logError(err instanceof Error ? err : new Error(errorMessage), 'AdminAssessmentList')
+                setError(errorMessage)
+                setAssessments([])
             } finally {
                 setLoading(false)
             }
@@ -29,7 +47,35 @@ export default function AdminAssessmentList() {
         fetchAssessments()
     }, [])
 
-    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
+    if (loading) {
+        return (
+            <div className="flex justify-center p-8">
+                <Loader2 className="animate-spin" />
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
+                <AlertCircle className="h-12 w-12 text-destructive" />
+                <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Failed to Load Assessments</h3>
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => {
+                        setLoading(true)
+                        setError(null)
+                        window.location.reload()
+                    }}
+                >
+                    Try Again
+                </Button>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-4">
@@ -71,7 +117,7 @@ export default function AdminAssessmentList() {
                                 size="sm"
                                 onClick={() => setSelectedAssessmentId(assessment.id)}
                             >
-                                <Eye className="h-4 w-4 mr-2" /> View
+                                <Eye className="h-4 w-4 mr-2" />View
                             </Button>
                         </div>
                     </div>
@@ -94,3 +140,4 @@ export default function AdminAssessmentList() {
         </div>
     )
 }
+

@@ -3,6 +3,8 @@ from fastapi import Header, HTTPException, status
 from gotrue import SyncGoTrueClient
 from postgrest import SyncPostgrestClient
 
+from core.logging import auth_logger, db_logger, log_error
+
 # Custom Client to avoid 'supafunc'/'pyroaring' dependency issues on Windows
 class CustomSupabaseClient:
     def __init__(self, url: str, key: str):
@@ -55,7 +57,8 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
     Verifies that the request comes from an authenticated admin or hr user.
     """
     if not x_supabase_auth:
-         raise HTTPException(
+        auth_logger.warning("Auth attempt without token")
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Auth Token",
         )
@@ -69,27 +72,34 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
         # SyncGoTrueClient.get_user returns a UserResponse object usually
         
         if not user_response or not user_response.user:
-             raise HTTPException(
+            auth_logger.warning("Auth attempt with invalid token")
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Token",
             )
             
         user_id = user_response.user.id
+        auth_logger.debug(f"Token validated for user: {user_id}")
         
         # Check role in profiles table
         profile = supabase.table("profiles").select("role").eq("id", user_id).single().execute()
         
         if not profile.data or profile.data.get("role") not in ["admin", "hr"]:
-             raise HTTPException(
+            auth_logger.warning(f"Access denied - insufficient privileges for user: {user_id}")
+            raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Admin or HR privileges required",
             )
-            
+        
+        auth_logger.info(f"Admin access granted for user: {user_id} (role: {profile.data.get('role')})")
         return user_response.user
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Auth error: {e}")
+        log_error(e, context="verify_admin")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed",
         )
+

@@ -46,7 +46,7 @@ export default function AdminDashboard({ stats, loading }: AdminDashboardProps) 
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats.total_candidates}</div>
+                        <div className="text-2xl font-bold">{stats.total_candidates ?? stats.total_users ?? 0}</div>
                     </CardContent>
                 </Card>
                 <Card>

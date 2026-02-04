@@ -6,6 +6,7 @@ from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPerm
 import os
 
 from dependencies import get_supabase, verify_admin
+from core.logging import api_logger, db_logger, error_logger, log_error
 
 router = APIRouter()
 
@@ -52,6 +53,7 @@ class RoleUpdate(BaseModel):
 
 @router.get("/stats", response_model=UserStats)
 def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin for easier testing initially, add back later
+    api_logger.info("Fetching admin stats")
     
     # 1. Count Candidates
     candidates_count = supabase.table("profiles").select("*", count="exact", head=True).eq("role", "candidate").execute().count
@@ -138,35 +140,45 @@ def update_user_role(user_id: str, role_update: RoleUpdate, supabase = Depends(g
 
 @router.get("/assessments", response_model=List[AssessmentSummary])
 def get_assessments(limit: int = 20, supabase = Depends(get_supabase)):
+    api_logger.info(f"Fetching assessments (limit={limit})")
     # Fetch assessments with user info
     # Supabase join: assessments(..., profiles(email, full_name), assessment_scores(overall_score))
     
-    response = supabase.table("assessments").select(
-        "id, status, created_at, user_id, profiles(email, full_name), assessment_scores(total_score)"
-    ).order("created_at", desc=True).limit(limit).execute()
+    try:
+        response = supabase.table("assessments").select(
+            "id, status, created_at, user_id, profiles(email, full_name), assessment_scores(total_score)"
+        ).order("created_at", desc=True).limit(limit).execute()
+        
+        db_logger.debug(f"Fetched {len(response.data)} assessments from database")
     
-    assessments = []
-    for item in response.data:
-        profile = item.get('profiles') or {}
-        scores_data = item.get('assessment_scores')
-        
-        total_score = None
-        if isinstance(scores_data, list) and len(scores_data) > 0:
-            total_score = scores_data[0].get('total_score')
-        elif isinstance(scores_data, dict):
-            total_score = scores_data.get('total_score')
+        assessments = []
+        for item in response.data:
+            profile = item.get('profiles') or {}
+            scores_data = item.get('assessment_scores')
+            
+            total_score = None
+            if isinstance(scores_data, list) and len(scores_data) > 0:
+                total_score = scores_data[0].get('total_score')
+            elif isinstance(scores_data, dict):
+                total_score = scores_data.get('total_score')
 
-        assessments.append(AssessmentSummary(
-            id=item['id'],
-            user_id=item['user_id'],
-            user_name=profile.get('full_name'),
-            user_email=profile.get('email', 'Unknown'),
-            status=item['status'],
-            overall_score=total_score,
-            created_at=item['created_at']
-        ))
+            assessments.append(AssessmentSummary(
+                id=item['id'],
+                user_id=item['user_id'],
+                user_name=profile.get('full_name'),
+                user_email=profile.get('email', 'Unknown'),
+                status=item['status'],
+                overall_score=total_score,
+                created_at=item['created_at']
+            ))
         
-    return assessments
+        api_logger.info(f"Returning {len(assessments)} assessments")
+        return assessments
+        
+    except Exception as e:
+        log_error(e, context="get_assessments")
+        raise HTTPException(status_code=500, detail="Failed to fetch assessments")
+
 
 @router.get("/assessments/{id}", response_model=AssessmentDetail)
 def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
@@ -199,31 +211,70 @@ def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
 @router.get("/assessments/{id}/audio/{response_id}")
 def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supabase)):
     """
-    Generate a SAS token for the audio file associated with a specific response.
+    Generate a fresh SAS token for the audio file associated with a specific response.
     """
+    from urllib.parse import unquote
+    
+    api_logger.info(f"Fetching audio SAS for assessment={id}, response={response_id}")
+    
     # 1. Get the response record to find the audio path
-    response_record = supabase.table("assessment_responses").select("audio_url").eq("id", response_id).single().execute()
+    try:
+        response_record = supabase.table("assessment_responses").select("audio_url, section").eq("id", response_id).single().execute()
+    except Exception as e:
+        api_logger.error(f"Database error fetching response: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
     
     if not response_record.data or not response_record.data.get('audio_url'):
-         raise HTTPException(status_code=404, detail="Audio recording not found for this response")
+        api_logger.warning(f"No audio_url found for response {response_id}")
+        raise HTTPException(status_code=404, detail="Audio recording not found for this response")
          
-    audio_path = response_record.data['audio_url']
+    saved_url = response_record.data['audio_url']
+    section = response_record.data.get('section', 'unknown')
+    api_logger.debug(f"Found audio URL for section '{section}': {saved_url[:80]}...")
     
-    # Assuming audio_path is stored relative to the container or full URL
-    # If it's a full URL, extract the blob name.
-    # Format might be: https://<account>.blob.core.windows.net/<container>/<blob>
-    # or just: <folder>/<filename>
+    # 2. Parse blob name from stored URL
+    # URL format: https://<account>.blob.core.windows.net/<container>/<blob_path>?<sas_token>
+    blob_name = saved_url
     
-    blob_name = audio_path
-    if "core.windows.net" in audio_path:
-        try:
-            blob_name = audio_path.split(CONTAINER_NAME + "/")[1]
-        except IndexError:
-             blob_name = audio_path # Fallback or error
-
-    # 2. Generate SAS Token
+    try:
+        if "core.windows.net" in saved_url:
+            # Extract path after container name
+            container_part = f"/{CONTAINER_NAME}/"
+            if container_part in saved_url:
+                file_part = saved_url.split(container_part)[-1]
+            else:
+                # Try alternative container format (without leading slash)
+                file_part = saved_url.split(f"{CONTAINER_NAME}/")[-1]
+            
+            # Remove SAS token query params
+            blob_name = file_part.split("?")[0]
+            
+            # Decode URL encoding (e.g., %20 -> space)
+            blob_name = unquote(blob_name)
+        
+        api_logger.debug(f"Parsed blob name: {blob_name}")
+        
+    except Exception as e:
+        api_logger.error(f"Failed to parse blob name from URL: {e}")
+        raise HTTPException(status_code=500, detail="Invalid audio record format")
+    
+    # 3. Verify blob exists (optional but recommended)
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        blob_client = blob_service_client.get_blob_client(container=CONTAINER_NAME, blob=blob_name)
+        
+        if not blob_client.exists():
+            api_logger.warning(f"Blob does not exist: {blob_name}")
+            raise HTTPException(status_code=404, detail="Audio file not found in storage")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        api_logger.warning(f"Could not verify blob existence: {e}")
+        # Continue anyway - let it fail at playback if blob doesn't exist
+
+    # 4. Generate fresh SAS Token
+    try:
         sas_token = generate_blob_sas(
             account_name=blob_service_client.account_name,
             container_name=CONTAINER_NAME,
@@ -234,13 +285,12 @@ def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supabase)):
         )
         
         # Construct full SAS URL
-        # We can return just the token or the full URL. Let's return the full URL.
-        # But wait, the frontend might just want the URL to put in <audio src="...">
-        
         sas_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas_token}"
         
-        return {"audio_url": sas_url}
+        api_logger.info(f"Generated SAS URL for {section} (expires in 1 hour)")
+        return {"audio_url": sas_url, "section": section}
         
     except Exception as e:
-        print(f"SAS Generation Error: {e}")
+        api_logger.error(f"SAS Generation Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate audio link")
+
