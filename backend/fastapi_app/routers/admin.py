@@ -148,9 +148,14 @@ def get_assessments(limit: int = 20, supabase = Depends(get_supabase)):
     assessments = []
     for item in response.data:
         profile = item.get('profiles') or {}
-        scores = item.get('assessment_scores')
-        total_score = scores[0]['total_score'] if scores and len(scores) > 0 else None
+        scores_data = item.get('assessment_scores')
         
+        total_score = None
+        if isinstance(scores_data, list) and len(scores_data) > 0:
+            total_score = scores_data[0].get('total_score')
+        elif isinstance(scores_data, dict):
+            total_score = scores_data.get('total_score')
+
         assessments.append(AssessmentSummary(
             id=item['id'],
             user_id=item['user_id'],
