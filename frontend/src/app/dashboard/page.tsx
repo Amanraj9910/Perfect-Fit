@@ -25,7 +25,7 @@ interface Application {
 }
 
 export default function CandidateDashboard() {
-    const { user, profile } = useAuth();
+    const { user, profile, session } = useAuth();
     const [applications, setApplications] = useState<Application[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -61,6 +61,21 @@ export default function CandidateDashboard() {
 
     // Assessment Link provided by user instructions
     const ASSESSMENT_LINK = "https://english-assisment-frontend-dneudafhasbchsfv.centralindia-01.azurewebsites.net";
+
+    const handleStartAssessment = () => {
+        if (session) {
+            const params = new URLSearchParams({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+                type: 'sso',
+                redirect: '/dashboard'
+            });
+            const url = `${ASSESSMENT_LINK}/sso-callback?${params.toString()}`;
+            window.open(url, '_blank');
+        } else {
+            window.open(`${ASSESSMENT_LINK}/login`, '_blank');
+        }
+    };
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -137,10 +152,12 @@ export default function CandidateDashboard() {
                                             </div>
                                         </div>
                                         <div className="pl-[52px]">
-                                            <Button asChild size="lg" className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/10 hover:shadow-green-900/20 transition-all">
-                                                <a href={ASSESSMENT_LINK} target="_blank" rel="noopener noreferrer">
-                                                    Start Assessment <ExternalLink className="h-4 w-4" />
-                                                </a>
+                                            <Button
+                                                size="lg"
+                                                className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/10 hover:shadow-green-900/20 transition-all"
+                                                onClick={handleStartAssessment}
+                                            >
+                                                Start Assessment <ExternalLink className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </div>
