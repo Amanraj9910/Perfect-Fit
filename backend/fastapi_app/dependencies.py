@@ -103,3 +103,72 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
             detail="Authentication failed",
         )
 
+from fastapi import Depends
+
+async def get_current_user(x_supabase_auth: str = Header(None)):
+    """Get current authenticated user without role check."""
+    if not x_supabase_auth:
+        auth_logger.warning("Auth attempt without token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Auth Token"
+        )
+    
+    try:
+        user_response = await supabase.auth.get_user(x_supabase_auth)
+        if not user_response or not user_response.user:
+            auth_logger.warning("Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Token"
+            )
+        
+        return user_response.user
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error(e, context="get_current_user")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
+
+async def get_user_with_role(user = Depends(get_current_user)):
+    """Get current user with their role from profiles table."""
+    try:
+        profile = await supabase.table("profiles").select("role, full_name, email").eq("id", str(user.id)).single().execute()
+        
+        # If no profile, they might be a new candidate. Default to 'candidate' if not found?
+        # Or better, create a basic profile? For now, just return what we have or error.
+        # But wait, we want to allow new users to be candidates.
+        
+        role = "candidate"
+        full_name = None
+        email = None
+        
+        if profile.data:
+            role = profile.data.get("role", "candidate")
+            full_name = profile.data.get("full_name")
+            email = profile.data.get("email")
+        
+        return {
+            "id": str(user.id),
+            "role": role,
+            "full_name": full_name,
+            "email": email
+        }
+    except Exception as e:
+        log_error(e, context="get_user_with_role")
+        # Proceed as candidate if error looking up profile (fail-safe for new users)
+        return {
+            "id": str(user.id),
+            "role": "candidate",
+            "full_name": None,
+            "email": None
+        }
+
+# Alias for backward compatibility or clearer intent
+# Since verify_admin already checks for ["admin", "hr"], we can reuse it.
+verify_hr_or_admin = verify_admin
+
+

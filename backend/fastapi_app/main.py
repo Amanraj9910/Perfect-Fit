@@ -7,6 +7,8 @@ import time
 
 from routers import admin
 from routers import jobs
+from routers import candidates
+from routers import applications
 from core.logging import (
     api_logger,
     error_logger,
@@ -86,6 +88,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include Routers
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(candidates.router, prefix="/api/candidates", tags=["candidates"])
+app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
 
 
 @app.get("/")

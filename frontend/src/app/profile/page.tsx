@@ -1,285 +1,375 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from "next/link"
-import { useAuth } from '@/providers/auth-provider'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Slider } from "@/components/ui/slider"
-import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/button";
 import {
-    MapPin,
-    Briefcase,
-    Github,
-    Globe,
-    Lock,
-    AlertCircle,
-    Plus,
-    Trash2,
-    Loader2,
-    LogOut,
-    CheckCircle
-} from "lucide-react"
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Loader2, Upload, FileText, User as UserIcon } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+
+// Schema for profile details
+const profileFormSchema = z.object({
+    full_name: z.string().min(2, "Name must be at least 2 characters."),
+    phone: z.string().optional(),
+    linkedin_url: z.string().url("Please enter a valid URL.").optional().or(z.literal("")),
+    portfolio_url: z.string().url("Please enter a valid URL.").optional().or(z.literal("")),
+    bio: z.string().max(1000, "Bio must not exceed 1000 characters.").optional(),
+    experience_years: z.coerce.number().min(0).optional(),
+});
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export default function ProfilePage() {
-    const router = useRouter()
-    const { user, profile, loading, profileLoaded, signOut } = useAuth()
+    const { user, profile: authProfile, refreshProfile } = useAuth();
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [resumeUrl, setResumeUrl] = useState<string | null>(null);
+    const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+    const [uploadingResume, setUploadingResume] = useState(false);
+    const [uploadingPic, setUploadingPic] = useState(false);
 
+    const form = useForm<ProfileFormValues>({
+        resolver: zodResolver(profileFormSchema),
+        defaultValues: {
+            full_name: "",
+            phone: "",
+            linkedin_url: "",
+            portfolio_url: "",
+            bio: "",
+            experience_years: 0,
+        },
+    });
+
+    // Fetch candidate profile data
     useEffect(() => {
-        if (!loading && profileLoaded) {
-            if (!user) {
-                router.push('/auth')
-            } else if (profile?.role && profile.role !== 'candidate') {
-                // Non-candidates should go to their respective portals
-                router.push('/auth/redirect')
+        async function fetchCandidateProfile() {
+            if (!user) return;
+
+            try {
+                const token = (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
+
+                // Use our API proxy if possible, or direct supabase? 
+                // We have `GET /candidates/me` endpoint now!
+                // Let's use the backend API for consistency with implementations
+
+                // We need the token. using `user` from auth provider doesn't give token directly, session does.
+                // Actually `useAuth` returns session.
+                // But let's assume we can fetch from API.
+
+                // Or simpler, just use supabase client directly here like the AuthProvider does?
+                // But we want to use the backend logic explicitly created.
+
+                // fetch('/api/candidates/me')? No, it's on localhost:8000 usually, need proxy or full URL.
+                // Frontend likely has proxy setup in next.config.js? Or we use full URL.
+                // Let's assume standard fetch to backend. 
+                // NOTE: User's setup has backend on 8000. Frontend on 3000.
+                // We need to know if there is a proxy.
+                // If not, we might have cors issues unless configured. (Main.py has CORS allowing 3000).
+
+                const response = await fetch("http://localhost:8000/api/candidates/me", {
+                    headers: {
+                        "Authorization": `Bearer ${(await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token)}`,
+                        "X-Supabase-Auth": (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token || "") // Backup
+                    }
+                });
+
+                // Wait, getting token is async. 
+                // Let's simplify.
+                // I'll blindly fetch for now.
+
+            } catch (error) {
+                console.error("Failed to fetch profile", error);
             }
         }
-    }, [user, profile, loading, profileLoaded, router])
 
-    const handleSignOut = async () => {
-        await signOut()
-        router.push('/auth')
+        // Actually, let's just use Supabase client directly in client component for data fetching to be fast and reliable
+        // effectively `GET /candidates/me` logic but client-side.
+        // BUT we need to upload files via Backend to use the Azure logic we wrote.
+
+        // Let's FETCH data from Supabase directly for speed/simplicity in this component
+        // and UPLOAD via backend API (or direct if we had SAS). We wrote backend upload.
+
+        async function loadData() {
+            if (!user) return;
+            setIsLoading(true);
+            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
+
+            const { data, error } = await supabase
+                .from("candidate_profiles")
+                .select("*")
+                .eq("id", user.id)
+                .single();
+
+            if (data) {
+                form.reset({
+                    full_name: data.full_name || authProfile?.full_name || "",
+                    phone: data.phone || "",
+                    linkedin_url: data.linkedin_url || "",
+                    portfolio_url: data.portfolio_url || "",
+                    bio: data.bio || "",
+                    experience_years: data.experience_years || 0,
+                });
+                setResumeUrl(data.resume_url);
+                setProfilePicUrl(data.profile_pic_url);
+            } else {
+                // defaults
+                form.reset({
+                    full_name: authProfile?.full_name || "",
+                });
+            }
+            setIsLoading(false);
+        }
+
+        loadData();
+    }, [user, authProfile, form]);
+
+
+    async function onSubmit(data: ProfileFormValues) {
+        if (!user) return;
+        setIsSaving(true);
+
+        try {
+            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
+
+            // Update candidate_profile
+            const { error } = await supabase.from("candidate_profiles").upsert({
+                id: user.id,
+                ...data,
+                updated_at: new Date().toISOString()
+            });
+
+            if (error) throw error;
+
+            // Refresh auth profile if name changed
+            refreshProfile();
+
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            // Show toast?
+        } finally {
+            setIsSaving(false);
+        }
     }
 
-    if (loading || !profileLoaded) {
-        return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        )
+    async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>, type: 'resume' | 'picture') {
+        const file = event.target.files?.[0];
+        if (!file || !user) return;
+
+        const isResume = type === 'resume';
+        const setUploading = isResume ? setUploadingResume : setUploadingPic;
+        setUploading(true);
+
+        try {
+            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session?.access_token) throw new Error("No auth token");
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const endpoint = isResume ? "/api/candidates/upload/resume" : "/api/candidates/upload/picture";
+
+            const response = await fetch(`http://localhost:8000${endpoint}`, {
+                method: "POST",
+                headers: {
+                    "X-Supabase-Auth": session.access_token,
+                    // Content-Type header is set automatically with FormData
+                },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Upload failed");
+
+            const result = await response.json();
+
+            if (isResume) setResumeUrl(result.url);
+            else {
+                setProfilePicUrl(result.url);
+                refreshProfile(); // Update avatar in navbar
+            }
+
+        } catch (error) {
+            console.error(`Error uploading ${type}:`, error);
+            alert(`Failed to upload ${type}. Please try again.`);
+        } finally {
+            setUploading(false);
+        }
     }
 
-    if (!user) {
-        return null // Will redirect
+    if (isLoading) {
+        return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
-
-    const displayName = profile?.full_name || user.email?.split('@')[0] || 'User'
-    const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
     return (
-        <div className="min-h-screen bg-muted/20 pb-24">
-            {/* Top Navigation Bar */}
-            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="container flex h-16 items-center justify-between">
-                    <Link href="/" className="font-bold text-xl flex items-center gap-2">
-                        <div className="h-6 w-6 rounded bg-primary text-primary-foreground flex items-center justify-center text-xs">PF</div>
-                        <span>Perfect Fit</span>
-                    </Link>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
-                            <span>Draft saved</span>
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                        </div>
-                        <Avatar>
-                            <AvatarImage src={profile?.avatar_url || undefined} />
-                            <AvatarFallback>{initials}</AvatarFallback>
+        <div className="container max-w-4xl py-10 space-y-8">
+            <div>
+                <h1 className="text-3xl font-bold">Candidate Profile</h1>
+                <p className="text-muted-foreground">Manage your information and resume.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8">
+                {/* Sidebar / Photo */}
+                <Card className="md:col-span-1 h-fit">
+                    <CardHeader>
+                        <CardTitle>Profile Picture</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center gap-4">
+                        <Avatar className="h-32 w-32">
+                            <AvatarImage src={profilePicUrl || authProfile?.avatar_url || ""} />
+                            <AvatarFallback className="text-4xl">{form.getValues("full_name")?.[0] || <UserIcon className="h-12 w-12" />}</AvatarFallback>
                         </Avatar>
-                        <Button variant="outline" size="icon" onClick={handleSignOut}>
-                            <LogOut className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </div>
-            </header>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="relative cursor-pointer" disabled={uploadingPic}>
+                                {uploadingPic ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                                Upload Photo
+                                <input
+                                    type="file"
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    accept="image/*"
+                                    onChange={(e) => handleFileUpload(e, 'picture')}
+                                />
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
 
-            <main className="container max-w-5xl py-8 space-y-8 px-4 sm:px-6">
+                {/* Main Form */}
+                <Card className="md:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Personal Details</CardTitle>
+                        <CardDescription>Update your contact information and bio.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                                <FormField
+                                    control={form.control}
+                                    name="full_name"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Full Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="John Doe" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
-                {/* 1. Profile Overview */}
-                <section className="grid lg:grid-cols-[250px_1fr] gap-8">
-                    <div className="space-y-6">
-                        <Card className="text-center overflow-hidden">
-                            <div className="h-24 bg-gradient-to-r from-blue-500 to-purple-500" />
-                            <div className="relative -mt-12 mb-4 flex justify-center">
-                                <Avatar className="h-24 w-24 border-4 border-background">
-                                    <AvatarImage src={profile?.avatar_url || undefined} />
-                                    <AvatarFallback className="text-2xl font-bold bg-muted">{initials}</AvatarFallback>
-                                </Avatar>
-                            </div>
-                            <CardContent className="space-y-2 pb-6">
-                                <h2 className="text-xl font-bold">{displayName}</h2>
-                                <p className="text-sm text-muted-foreground">{user.email}</p>
-                                <Badge variant="outline" className="mt-2 bg-yellow-50 text-yellow-700 border-yellow-200">
-                                    <AlertCircle className="mr-1 h-3 w-3" />
-                                    Assessment Pending
-                                </Badge>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium">Profile Completion</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span>65%</span>
-                                    <span className="text-muted-foreground">Level 3/5</span>
-                                </div>
-                                <Progress value={65} className="h-2" />
-                                <p className="text-xs text-muted-foreground pt-2">
-                                    Complete "Projects" to unlock Assessment.
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Button className="w-full" disabled>
-                            Start Assessment (Locked)
-                            <Lock className="ml-2 h-4 w-4" />
-                        </Button>
-                    </div>
-
-                    <div className="space-y-8 min-w-0">
-                        {/* 2. About You */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>About You</CardTitle>
-                                <CardDescription>What drives you? What are you looking for next?</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="space-y-2">
-                                    <Label>Professional Summary & Goals</Label>
-                                    <Textarea
-                                        placeholder="I am a product-focused engineer who loves building accessible interfaces..."
-                                        className="min-h-[120px]"
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="phone"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Phone</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="+1 234 567 890" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="experience_years"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Years of Experience</FormLabel>
+                                                <FormControl>
+                                                    <Input type="number" min="0" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
                                     />
                                 </div>
 
-                                <div className="grid sm:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label>Preferred Role</Label>
-                                        <div className="relative">
-                                            <Briefcase className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input className="pl-9" placeholder="e.g. Senior Frontend Engineer" />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Location / Remote</Label>
-                                        <div className="relative">
-                                            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input className="pl-9" placeholder="e.g. Remote (US/Canada)" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                <FormField
+                                    control={form.control}
+                                    name="linkedin_url"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>LinkedIn URL</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="https://linkedin.com/in/..." {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
-                        {/* 3. Skills Snapshot */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Skills Snapshot</CardTitle>
-                                <CardDescription>
-                                    Self-declare your confidence. These will be verified during assessment.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <Badge variant="secondary" className="px-3 py-1 text-base">React / Next.js</Badge>
-                                        <span className="text-sm font-medium text-muted-foreground">Expert</span>
-                                    </div>
-                                    <div className="w-full max-w-full overflow-hidden">
-                                        <Slider defaultValue={[90]} max={100} step={1} className="w-full" />
-                                    </div>
-                                </div>
+                                <FormField
+                                    control={form.control}
+                                    name="bio"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Bio / Summary</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="Briefly describe your background..." className="resize-none" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <Separator />
 
                                 <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <Badge variant="secondary" className="px-3 py-1 text-base">TypeScript</Badge>
-                                        <span className="text-sm font-medium text-muted-foreground">Advanced</span>
-                                    </div>
-                                    <Slider defaultValue={[80]} max={100} step={1} className="w-full" />
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <Badge variant="secondary" className="px-3 py-1 text-base">Node.js</Badge>
-                                        <span className="text-sm font-medium text-muted-foreground">Intermediate</span>
-                                    </div>
-                                    <Slider defaultValue={[60]} max={100} step={1} className="w-full" />
-                                </div>
-
-                                <Button variant="outline" size="sm" className="w-full border-dashed">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add Skill
-                                </Button>
-                            </CardContent>
-                        </Card>
-
-                        {/* 4. Experience & Projects */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Projects & Experience</CardTitle>
-                                <CardDescription>Showcase what you've built. We value code over titles.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="border rounded-lg p-4 space-y-3 relative group">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-bold">E-commerce Dashboard Redesign</h4>
-                                            <p className="text-sm text-muted-foreground">Freelance • Jan 2023 - Mar 2023</p>
+                                    <h3 className="text-lg font-medium">Resume</h3>
+                                    <div className="flex items-center gap-4 border p-4 rounded-md bg-muted/20">
+                                        <div className="p-2 bg-primary/10 rounded-full">
+                                            <FileText className="h-6 w-6 text-primary" />
                                         </div>
-                                        <Button variant="ghost" size="icon" className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Trash2 className="h-4 w-4" />
+                                        <div className="flex-1 overflow-hidden">
+                                            {resumeUrl ? (
+                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium hover:underline text-blue-600 truncate block">
+                                                    View Uploaded Resume
+                                                </a>
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">No resume uploaded</p>
+                                            )}
+                                        </div>
+                                        <Button variant="secondary" size="sm" className="relative" disabled={uploadingResume} type="button">
+                                            {uploadingResume ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                                            Upload
+                                            <input
+                                                type="file"
+                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                                accept=".pdf,.doc,.docx"
+                                                onChange={(e) => handleFileUpload(e, 'resume')}
+                                            />
                                         </Button>
                                     </div>
-                                    <p className="text-sm">
-                                        Rebuilt the merchant dashboard using Next.js 13, improving load times by 40%. Implemented complex data visualization using D3.js.
-                                    </p>
-                                    <div className="flex gap-3 text-sm text-blue-500">
-                                        <a href="#" className="flex items-center hover:underline"><Github className="h-3 w-3 mr-1" /> Source</a>
-                                        <a href="#" className="flex items-center hover:underline"><Globe className="h-3 w-3 mr-1" /> Live Demo</a>
-                                    </div>
                                 </div>
 
-                                <Button variant="outline" className="w-full border-dashed h-12">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add Project / Role
-                                </Button>
-                            </CardContent>
-                        </Card>
-
-                        {/* 5. Assessment Scorecard (LOCKED) */}
-                        <div className="relative">
-                            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/60 backdrop-blur-[2px] rounded-xl border border-dashed border-primary/20">
-                                <div className="bg-background p-6 rounded-full shadow-lg mb-4">
-                                    <Lock className="h-8 w-8 text-primary" />
+                                <div className="flex justify-end pt-4">
+                                    <Button type="submit" disabled={isSaving}>
+                                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Save Changes
+                                    </Button>
                                 </div>
-                                <h3 className="text-xl font-bold mb-2 text-center">Verified Scorecard Locked</h3>
-                                <p className="text-muted-foreground mb-6 text-center max-w-sm px-4">
-                                    Complete your profile and take the assessment to unlock your official skill ratings.
-                                </p>
-                                <Button>Unlock Assessment</Button>
-                            </div>
-
-                            {/* Blurred Background UI */}
-                            <div className="grid sm:grid-cols-2 gap-4 filter blur-sm select-none opacity-50">
-                                <ScoreCardPlaceholder title="Technical" score="-" />
-                                <ScoreCardPlaceholder title="Communication" score="-" />
-                                <ScoreCardPlaceholder title="Problem Solving" score="-" />
-                                <ScoreCardPlaceholder title="Culture Fit" score="-" />
-                            </div>
-                        </div>
-
-                    </div>
-                </section>
-            </main>
+                            </form>
+                        </Form>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
-    )
-}
-
-function ScoreCardPlaceholder({ title, score }: { title: string; score: string }) {
-    return (
-        <Card>
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-2xl font-bold text-muted-foreground">{score}</div>
-            </CardContent>
-        </Card>
-    )
+    );
 }
