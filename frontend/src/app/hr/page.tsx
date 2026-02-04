@@ -108,7 +108,7 @@ export default function HRPage() {
                     </TabsContent>
 
                     <TabsContent value="users" className="space-y-4">
-                        <AdminUserList />
+                        <AdminUserList readonly={true} />
                     </TabsContent>
 
                     <TabsContent value="assessments" className="space-y-4">

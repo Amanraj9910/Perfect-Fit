@@ -8,7 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useDebounce } from '@/lib/use-debounce'
 
-export default function AdminUserList() {
+interface AdminUserListProps {
+    readonly?: boolean
+}
+
+export default function AdminUserList({ readonly = false }: AdminUserListProps) {
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -113,22 +117,24 @@ export default function AdminUserList() {
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[user.role] || 'bg-gray-100'}`}>
                                         {user.role}
                                     </span>
-                                    <Select
-                                        value={user.role}
-                                        onValueChange={(val) => handleRoleUpdate(user.id, val)}
-                                        disabled={updating === user.id}
-                                    >
-                                        <SelectTrigger className="w-[130px]">
-                                            {updating === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="candidate">Candidate</SelectItem>
-                                            <SelectItem value="employee">Employee</SelectItem>
-                                            <SelectItem value="hr">HR</SelectItem>
-                                            <SelectItem value="recruiter">Recruiter</SelectItem>
-                                            <SelectItem value="admin">Admin</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    {!readonly && (
+                                        <Select
+                                            value={user.role}
+                                            onValueChange={(val) => handleRoleUpdate(user.id, val)}
+                                            disabled={updating === user.id}
+                                        >
+                                            <SelectTrigger className="w-[130px]">
+                                                {updating === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="candidate">Candidate</SelectItem>
+                                                <SelectItem value="employee">Employee</SelectItem>
+                                                <SelectItem value="hr">HR</SelectItem>
+                                                <SelectItem value="recruiter">Recruiter</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 </div>
                             </div>
                         ))}

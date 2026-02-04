@@ -239,11 +239,18 @@ async def create_job(
 
 @router.get("")
 async def list_jobs(
-    user: dict = Depends(verify_employee_or_admin),
+    user: dict = Depends(get_user_with_role),
     supabase: CustomSupabaseClient = Depends(get_supabase)
 ):
     """List job roles. Employees see their own, admins see all."""
     api_logger.info(f"Listing jobs for user: {user['id']} (role: {user['role']})")
+    
+    # Check permissions
+    if user["role"] not in ["employee", "admin", "hr"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Employee, HR, or Admin privileges required"
+        )
     
     try:
         query = supabase.table("job_roles").select("*")
