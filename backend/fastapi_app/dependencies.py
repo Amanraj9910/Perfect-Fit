@@ -1,7 +1,7 @@
 import os
 from fastapi import Header, HTTPException, status
-from gotrue import SyncGoTrueClient
-from postgrest import SyncPostgrestClient
+from gotrue import AsyncGoTrueClient
+from postgrest import AsyncPostgrestClient
 
 from core.logging import auth_logger, db_logger, log_error
 
@@ -17,7 +17,7 @@ class CustomSupabaseClient:
         }
         
         # Initialize Auth (GoTrue)
-        self.auth = SyncGoTrueClient(
+        self.auth = AsyncGoTrueClient(
             url=f"{url}/auth/v1",
             headers={
                 "apikey": key,
@@ -26,7 +26,7 @@ class CustomSupabaseClient:
         )
         
         # Initialize DB (PostgREST)
-        self.postgrest = SyncPostgrestClient(
+        self.postgrest = AsyncPostgrestClient(
             base_url=f"{url}/rest/v1",
             headers=self.headers
         )
@@ -66,7 +66,7 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
     try:
         # Check if the token is valid and get user
         # gotrue-py get_user takes just the jwt
-        user_response = supabase.auth.get_user(x_supabase_auth)
+        user_response = await supabase.auth.get_user(x_supabase_auth)
         
         # The structure of user_response might differ slightly in direct gotrue usage vs supabase wrapper
         # SyncGoTrueClient.get_user returns a UserResponse object usually
@@ -82,7 +82,7 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
         auth_logger.debug(f"Token validated for user: {user_id}")
         
         # Check role in profiles table
-        profile = supabase.table("profiles").select("role").eq("id", user_id).single().execute()
+        profile = await supabase.table("profiles").select("role").eq("id", user_id).single().execute()
         
         if not profile.data or profile.data.get("role") not in ["admin", "hr"]:
             auth_logger.warning(f"Access denied - insufficient privileges for user: {user_id}")

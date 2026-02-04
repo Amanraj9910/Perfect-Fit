@@ -52,24 +52,24 @@ class RoleUpdate(BaseModel):
 # --- Endpoints ---
 
 @router.get("/stats", response_model=UserStats)
-def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin for easier testing initially, add back later
+async def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin for easier testing initially, add back later
     api_logger.info("Fetching admin stats")
     
     # 1. Count Candidates
-    candidates_count = supabase.table("profiles").select("*", count="exact", head=True).eq("role", "candidate").execute().count
+    candidates_count = (await supabase.table("profiles").select("*", count="exact", head=True).eq("role", "candidate").execute()).count
     
     # 2. Count Employees
-    employees_count = supabase.table("profiles").select("*", count="exact", head=True).eq("role", "employee").execute().count
+    employees_count = (await supabase.table("profiles").select("*", count="exact", head=True).eq("role", "employee").execute()).count
     
     # 3. Total Assessments
-    assessments_count = supabase.table("assessments").select("*", count="exact", head=True).execute().count
+    assessments_count = (await supabase.table("assessments").select("*", count="exact", head=True).execute()).count
     
     # 4. Assessments Today
     today = datetime.now().strftime("%Y-%m-%d")
-    assessments_today_count = supabase.table("assessments").select("*", count="exact", head=True).gte("created_at", today).execute().count
+    assessments_today_count = (await supabase.table("assessments").select("*", count="exact", head=True).gte("created_at", today).execute()).count
     
     # 5. Average Score & Distribution
-    scores_response = supabase.table("assessment_scores").select("total_score").execute()
+    scores_response = await supabase.table("assessment_scores").select("total_score").execute()
     scores = [s['total_score'] for s in scores_response.data if s['total_score'] is not None]
     
     avg_score = sum(scores) / len(scores) if scores else 0.0
@@ -100,7 +100,7 @@ def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin for easi
     )
 
 @router.get("/users", response_model=dict)
-def get_users(
+async def get_users(
     page: int = 1, 
     limit: int = 10, 
     search: Optional[str] = None,
@@ -116,7 +116,7 @@ def get_users(
         query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
         
     query = query.order("created_at", desc=True).range(start, end)
-    result = query.execute()
+    result = await query.execute()
     
     return {
         "data": result.data,
@@ -126,12 +126,12 @@ def get_users(
     }
 
 @router.patch("/users/{user_id}/role")
-def update_user_role(user_id: str, role_update: RoleUpdate, supabase = Depends(get_supabase)):
+async def update_user_role(user_id: str, role_update: RoleUpdate, supabase = Depends(get_supabase)):
     valid_roles = ['candidate', 'employee', 'hr', 'recruiter', 'admin']
     if role_update.role not in valid_roles:
         raise HTTPException(status_code=400, detail="Invalid role")
         
-    result = supabase.table("profiles").update({"role": role_update.role}).eq("id", user_id).execute()
+    result = await supabase.table("profiles").update({"role": role_update.role}).eq("id", user_id).execute()
     
     if not result.data:
         raise HTTPException(status_code=404, detail="User not found")
@@ -139,13 +139,13 @@ def update_user_role(user_id: str, role_update: RoleUpdate, supabase = Depends(g
     return result.data[0]
 
 @router.get("/assessments", response_model=List[AssessmentSummary])
-def get_assessments(limit: int = 20, supabase = Depends(get_supabase)):
+async def get_assessments(limit: int = 20, supabase = Depends(get_supabase)):
     api_logger.info(f"Fetching assessments (limit={limit})")
     # Fetch assessments with user info
     # Supabase join: assessments(..., profiles(email, full_name), assessment_scores(overall_score))
     
     try:
-        response = supabase.table("assessments").select(
+        response = await supabase.table("assessments").select(
             "id, status, created_at, user_id, profiles(email, full_name), assessment_scores(total_score)"
         ).order("created_at", desc=True).limit(limit).execute()
         
@@ -181,9 +181,9 @@ def get_assessments(limit: int = 20, supabase = Depends(get_supabase)):
 
 
 @router.get("/assessments/{id}", response_model=AssessmentDetail)
-def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
+async def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
     # 1. Fetch Assessment & User Profile
-    assessment_res = supabase.table("assessments").select(
+    assessment_res = await supabase.table("assessments").select(
         "*, profiles(*)"
     ).eq("id", id).single().execute()
     
@@ -194,11 +194,11 @@ def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
     profile = assessment.get('profiles')
     
     # 2. Fetch Scores
-    scores_res = supabase.table("assessment_scores").select("*").eq("assessment_id", id).maybe_single().execute()
+    scores_res = await supabase.table("assessment_scores").select("*").eq("assessment_id", id).maybe_single().execute()
     scores = scores_res.data
     
     # 3. Fetch Responses
-    responses_res = supabase.table("assessment_responses").select("*").eq("assessment_id", id).order("created_at").execute()
+    responses_res = await supabase.table("assessment_responses").select("*").eq("assessment_id", id).order("created_at").execute()
     responses = responses_res.data # Contains audio_url / transcript / feedback
     
     return AssessmentDetail(
@@ -209,7 +209,7 @@ def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
     )
 
 @router.get("/assessments/{id}/audio/{response_id}")
-def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supabase)):
+async def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supabase)):
     """
     Generate a fresh SAS token for the audio file associated with a specific response.
     """
@@ -219,7 +219,7 @@ def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supabase)):
     
     # 1. Get the response record to find the audio path
     try:
-        response_record = supabase.table("assessment_responses").select("audio_url, section").eq("id", response_id).single().execute()
+        response_record = await supabase.table("assessment_responses").select("audio_url, section").eq("id", response_id).single().execute()
     except Exception as e:
         api_logger.error(f"Database error fetching response: {e}")
         raise HTTPException(status_code=500, detail="Database error")
