@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
-import { jobsApi, JobRole } from '@/lib/api'
+import { useEmployeeJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/lib/hooks/use-admin-queries'
+import { JobRole } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,11 +28,7 @@ import {
 export default function EmployeePortal() {
     const router = useRouter()
     const { user, profile, loading: authLoading, profileLoaded, signOut } = useAuth()
-    const [jobRoles, setJobRoles] = useState<JobRole[]>([])
-    const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [error, setError] = useState<string | null>(null)
     const [editingJob, setEditingJob] = useState<JobRole | null>(null)
 
     // Form state
@@ -40,19 +37,13 @@ export default function EmployeePortal() {
     const [description, setDescription] = useState('')
     const [requirements, setRequirements] = useState('')
 
-    const fetchJobRoles = async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            const data = await jobsApi.list()
-            setJobRoles(data || [])
-        } catch (err) {
-            console.error('Error fetching job roles:', err)
-            setError(err instanceof Error ? err.message : 'Failed to fetch job roles')
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Use React Query for data fetching and caching
+    const { data: jobRoles = [], isLoading: loading, error } = useEmployeeJobs()
+    const createJobMutation = useCreateJob()
+    const updateJobMutation = useUpdateJob()
+    const deleteJobMutation = useDeleteJob()
+
+    const saving = createJobMutation.isPending || updateJobMutation.isPending
 
     useEffect(() => {
         if (!authLoading && profileLoaded) {
@@ -60,12 +51,9 @@ export default function EmployeePortal() {
                 router.push('/auth')
             } else if (profile?.role !== 'employee' && profile?.role !== 'admin') {
                 router.push('/auth/redirect')
-            } else {
-                fetchJobRoles()
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, profile, authLoading, profileLoaded])
+    }, [user, profile, authLoading, profileLoaded, router])
 
     const resetForm = () => {
         setTitle('')
@@ -78,21 +66,17 @@ export default function EmployeePortal() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setSaving(true)
-        setError(null)
 
         try {
             if (editingJob) {
                 // Update existing job
-                await jobsApi.update(editingJob.id, {
-                    title,
-                    department,
-                    description,
-                    requirements
+                await updateJobMutation.mutateAsync({
+                    id: editingJob.id,
+                    data: { title, department, description, requirements }
                 })
             } else {
                 // Create new job
-                await jobsApi.create({
+                await createJobMutation.mutateAsync({
                     title,
                     department,
                     description,
@@ -100,12 +84,9 @@ export default function EmployeePortal() {
                 })
             }
             resetForm()
-            fetchJobRoles()
         } catch (err) {
             console.error('Error saving job role:', err)
-            setError(err instanceof Error ? err.message : 'Failed to save job role')
-        } finally {
-            setSaving(false)
+            alert(err instanceof Error ? err.message : 'Failed to save job role')
         }
     }
 
@@ -118,15 +99,14 @@ export default function EmployeePortal() {
         setShowForm(true)
     }
 
-    const deleteJobRole = async (id: string) => {
+    const handleDeleteJob = async (id: string) => {
         if (!confirm('Are you sure you want to delete this job role?')) return
 
         try {
-            await jobsApi.delete(id)
-            setJobRoles(jobRoles.filter(j => j.id !== id))
+            await deleteJobMutation.mutateAsync(id)
         } catch (err) {
             console.error('Error deleting job role:', err)
-            setError(err instanceof Error ? err.message : 'Failed to delete job role')
+            alert(err instanceof Error ? err.message : 'Failed to delete job role')
         }
     }
 
@@ -196,7 +176,7 @@ export default function EmployeePortal() {
                 {error && (
                     <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
                         <p className="font-medium">Error</p>
-                        <p className="text-sm">{error}</p>
+                        <p className="text-sm">{error instanceof Error ? error.message : 'Unknown error'}</p>
                     </div>
                 )}
 
@@ -218,7 +198,7 @@ export default function EmployeePortal() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-yellow-600">
-                                {jobRoles.filter(j => j.status === 'pending').length}
+                                {jobRoles.filter((j: JobRole) => j.status === 'pending').length}
                             </div>
                         </CardContent>
                     </Card>
@@ -229,7 +209,7 @@ export default function EmployeePortal() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
-                                {jobRoles.filter(j => j.status === 'approved').length}
+                                {jobRoles.filter((j: JobRole) => j.status === 'approved').length}
                             </div>
                         </CardContent>
                     </Card>
@@ -240,7 +220,7 @@ export default function EmployeePortal() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {new Set(jobRoles.map(j => j.department)).size}
+                                {new Set(jobRoles.map((j: JobRole) => j.department)).size}
                             </div>
                         </CardContent>
                     </Card>
@@ -343,7 +323,7 @@ export default function EmployeePortal() {
                             </p>
                         ) : (
                             <div className="space-y-4">
-                                {jobRoles.map((job) => (
+                                {jobRoles.map((job: JobRole) => (
                                     <div key={job.id} className="p-4 border rounded-lg hover:bg-muted/20 transition-colors">
                                         <div className="flex justify-between items-start">
                                             <div className="flex items-start gap-3">
@@ -372,7 +352,8 @@ export default function EmployeePortal() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-destructive hover:text-destructive"
-                                                    onClick={() => deleteJobRole(job.id)}
+                                                    onClick={() => handleDeleteJob(job.id)}
+                                                    disabled={deleteJobMutation.isPending}
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { jobsApi, JobRole } from '@/lib/api'
+import { useState } from 'react'
+import { useAdminJobs, usePendingJobs, useApproveJob, useRejectJob, useCloseJob } from '@/lib/hooks/use-admin-queries'
+import { JobRole } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,17 +25,11 @@ import {
     Search,
     ChevronDown,
     ChevronUp,
-    User,
     Calendar,
-    FileText,
     X
 } from 'lucide-react'
 
 export default function AdminJobApprovals() {
-    const [pendingJobs, setPendingJobs] = useState<JobRole[]>([])
-    const [allJobs, setAllJobs] = useState<JobRole[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [expandedJob, setExpandedJob] = useState<string | null>(null)
     const [viewMode, setViewMode] = useState<'pending' | 'all'>('pending')
@@ -43,40 +38,24 @@ export default function AdminJobApprovals() {
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
     const [rejectReason, setRejectReason] = useState('')
-    const [actionLoading, setActionLoading] = useState(false)
 
-    const fetchJobs = async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            const [pending, all] = await Promise.all([
-                jobsApi.listPending(),
-                jobsApi.list()
-            ])
-            setPendingJobs(pending || [])
-            setAllJobs(all || [])
-        } catch (err) {
-            console.error('Error fetching jobs:', err)
-            setError(err instanceof Error ? err.message : 'Failed to fetch jobs')
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Use React Query for data fetching and caching
+    const { data: allJobs = [], isLoading: allJobsLoading, error: allJobsError } = useAdminJobs()
+    const { data: pendingJobs = [], isLoading: pendingLoading } = usePendingJobs()
 
-    useEffect(() => {
-        fetchJobs()
-    }, [])
+    // Mutation hooks
+    const approveJobMutation = useApproveJob()
+    const rejectJobMutation = useRejectJob()
+    const closeJobMutation = useCloseJob()
+
+    const isLoading = allJobsLoading || pendingLoading
+    const actionLoading = approveJobMutation.isPending || rejectJobMutation.isPending || closeJobMutation.isPending
 
     const handleApprove = async (jobId: string) => {
-        setActionLoading(true)
         try {
-            await jobsApi.approve(jobId)
-            fetchJobs()
+            await approveJobMutation.mutateAsync(jobId)
         } catch (err) {
             console.error('Error approving job:', err)
-            setError(err instanceof Error ? err.message : 'Failed to approve job')
-        } finally {
-            setActionLoading(false)
         }
     }
 
@@ -89,33 +68,23 @@ export default function AdminJobApprovals() {
     const handleRejectConfirm = async () => {
         if (!selectedJobId || !rejectReason.trim()) return
 
-        setActionLoading(true)
         try {
-            await jobsApi.reject(selectedJobId, rejectReason)
+            await rejectJobMutation.mutateAsync({ jobId: selectedJobId, reason: rejectReason })
             setRejectDialogOpen(false)
             setSelectedJobId(null)
             setRejectReason('')
-            fetchJobs()
         } catch (err) {
             console.error('Error rejecting job:', err)
-            setError(err instanceof Error ? err.message : 'Failed to reject job')
-        } finally {
-            setActionLoading(false)
         }
     }
 
     const handleClose = async (jobId: string) => {
         if (!confirm('Are you sure you want to close this job? It will no longer accept applications.')) return
 
-        setActionLoading(true)
         try {
-            await jobsApi.close(jobId)
-            fetchJobs()
+            await closeJobMutation.mutateAsync(jobId)
         } catch (err) {
             console.error('Error closing job:', err)
-            setError(err instanceof Error ? err.message : 'Failed to close job')
-        } finally {
-            setActionLoading(false)
         }
     }
 
@@ -146,12 +115,12 @@ export default function AdminJobApprovals() {
     }
 
     const displayJobs = viewMode === 'pending' ? pendingJobs : allJobs
-    const filteredJobs = displayJobs.filter(job =>
+    const filteredJobs = displayJobs.filter((job: JobRole) =>
         job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         job.department.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -162,16 +131,13 @@ export default function AdminJobApprovals() {
     return (
         <div className="space-y-6">
             {/* Error Alert */}
-            {error && (
+            {allJobsError && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="font-medium">Error</p>
-                            <p className="text-sm">{error}</p>
+                            <p className="text-sm">{allJobsError instanceof Error ? allJobsError.message : 'Unknown error'}</p>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => setError(null)}>
-                            <X className="h-4 w-4" />
-                        </Button>
                     </div>
                 </div>
             )}
@@ -194,7 +160,7 @@ export default function AdminJobApprovals() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">
-                            {allJobs.filter(j => j.status === 'approved' && j.is_open).length}
+                            {allJobs.filter((j: JobRole) => j.status === 'approved' && j.is_open).length}
                         </div>
                     </CardContent>
                 </Card>
@@ -264,7 +230,7 @@ export default function AdminJobApprovals() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {filteredJobs.map((job) => (
+                            {filteredJobs.map((job: JobRole) => (
                                 <div
                                     key={job.id}
                                     className="border rounded-lg overflow-hidden"

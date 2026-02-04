@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
+import { useAdminStats } from '@/lib/hooks/use-admin-queries'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Briefcase, Loader2, LogOut, LayoutDashboard, Users, FileText } from 'lucide-react'
-import { adminApi } from '@/lib/api'
 
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import AdminUserList from '@/components/admin/AdminUserList'
@@ -17,11 +17,11 @@ import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
 export default function HRPage() {
     const router = useRouter()
     const { user, profile, loading: authLoading, profileLoaded, signOut } = useAuth()
-    const [stats, setStats] = useState(null)
-    const [statsLoading, setStatsLoading] = useState(true)
 
-    // Check if user is HR or Admin (Admins should also be able to see HR view if they want, or just strictly HR)
-    // Strictly HR or Admin.
+    // Use React Query for stats - cached across tab switches
+    const { data: stats, isLoading: statsLoading } = useAdminStats()
+
+    // Check if user is HR or Admin
     const isAllowed = profile?.role === 'hr' || profile?.role === 'admin'
 
     useEffect(() => {
@@ -30,22 +30,9 @@ export default function HRPage() {
                 router.push('/auth')
             } else if (!isAllowed) {
                 router.push('/auth/redirect')
-            } else {
-                fetchStats()
             }
         }
-    }, [user, isAllowed, authLoading, profileLoaded])
-
-    const fetchStats = async () => {
-        try {
-            const data = await adminApi.getStats()
-            setStats(data)
-        } catch (error) {
-            console.error("Failed to fetch stats", error)
-        } finally {
-            setStatsLoading(false)
-        }
-    }
+    }, [user, isAllowed, authLoading, profileLoaded, router])
 
     const handleSignOut = async () => {
         await signOut()

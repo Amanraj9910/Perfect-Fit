@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { CheckCircle, XCircle, ExternalLink, Loader2, FileText } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,53 +16,28 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/auth-provider'
-import { applicationsApi, JobApplication } from '@/lib/api'
+import { useAdminApplications, useUpdateApplicationStatus } from '@/lib/hooks/use-admin-queries'
+import { JobApplication } from '@/lib/api'
 
 export default function AdminApplicationsList() {
     const { user } = useAuth();
-    const [applications, setApplications] = useState<JobApplication[]>([])
-    const [loading, setLoading] = useState(true)
-    const [processingId, setProcessingId] = useState<string | null>(null)
-
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
     const [feedback, setFeedback] = useState("")
 
-    const fetchApplications = useCallback(async () => {
-        if (!user) {
-            setLoading(false)
-            return
-        }
-        setLoading(true)
-        try {
-            const data = await applicationsApi.listAll()
-            setApplications(Array.isArray(data) ? data : [])
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setLoading(false)
-        }
-    }, [user])
-
-    useEffect(() => {
-        fetchApplications()
-    }, [fetchApplications])
+    // Use React Query for data fetching and caching
+    const { data: applications = [], isLoading } = useAdminApplications()
+    const updateStatusMutation = useUpdateApplicationStatus()
 
     const updateStatus = async (appId: string, status: JobApplication['status'], feedbackText?: string) => {
-        setProcessingId(appId)
         try {
-            await applicationsApi.updateStatus(appId, status, feedbackText)
-
-            // Update local state
-            setApplications(apps => apps.map(a => a.id === appId ? { ...a, status, feedback: feedbackText } : a));
-        } catch (error) {
-            console.error(error);
-            alert("Failed to update status");
-        } finally {
-            setProcessingId(null)
+            await updateStatusMutation.mutateAsync({ id: appId, status, feedback: feedbackText })
             setRejectDialogOpen(false)
             setFeedback("")
             setSelectedAppId(null)
+        } catch (error) {
+            console.error(error);
+            alert("Failed to update status");
         }
     }
 
@@ -86,7 +61,7 @@ export default function AdminApplicationsList() {
         }
     }
 
-    if (loading) return <div className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" /></div>;
+    if (isLoading) return <div className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" /></div>;
 
     return (
         <div className="space-y-6">
@@ -97,7 +72,7 @@ export default function AdminApplicationsList() {
                 </div>
             ) : (
                 <div className="grid gap-4">
-                    {applications.map(app => (
+                    {applications.map((app: JobApplication) => (
                         <Card key={app.id}>
                             <CardHeader className="flex flex-row items-start justify-between space-y-0">
                                 <div className="flex gap-4">
@@ -157,7 +132,7 @@ export default function AdminApplicationsList() {
                                             size="sm"
                                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                             onClick={() => handleRejectClick(app.id)}
-                                            disabled={processingId === app.id}
+                                            disabled={updateStatusMutation.isPending}
                                         >
                                             <XCircle className="h-4 w-4 mr-2" />
                                             Discard
@@ -166,9 +141,9 @@ export default function AdminApplicationsList() {
                                             size="sm"
                                             className="bg-green-600 hover:bg-green-700"
                                             onClick={() => updateStatus(app.id, 'shortlisted')}
-                                            disabled={processingId === app.id}
+                                            disabled={updateStatusMutation.isPending}
                                         >
-                                            {processingId === app.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                                            {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
                                             Next Stage
                                         </Button>
                                     </>
@@ -198,8 +173,8 @@ export default function AdminApplicationsList() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
-                        <Button variant="destructive" onClick={confirmReject} disabled={!feedback.trim() || !!processingId}>
-                            {processingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Discard Application"}
+                        <Button variant="destructive" onClick={confirmReject} disabled={!feedback.trim() || updateStatusMutation.isPending}>
+                            {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Discard Application"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

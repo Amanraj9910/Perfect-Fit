@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
-import { adminApi } from '@/lib/api'
-import { uiLogger, logError } from '@/lib/logger'
+import { useState } from 'react'
+import { useAdminAssessments } from '@/lib/hooks/use-admin-queries'
 import { Loader2, Eye, FileAudio, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AssessmentDetail } from './AdminAssessmentDetail'
@@ -12,42 +11,12 @@ import {
 } from "@/components/ui/dialog"
 
 export default function AdminAssessmentList() {
-    const [assessments, setAssessments] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null)
 
-    useEffect(() => {
-        const fetchAssessments = async () => {
-            uiLogger.info('AdminAssessmentList: Fetching assessments')
-            setError(null)
+    // Use React Query for data fetching and caching
+    const { data: assessments = [], isLoading, error } = useAdminAssessments()
 
-            try {
-                const data = await adminApi.getAssessments()
-
-                // Defensive validation - ensure data is an array
-                if (!Array.isArray(data)) {
-                    uiLogger.error('getAssessments returned non-array', data)
-                    setAssessments([])
-                    setError('Received invalid data format from server')
-                    return
-                }
-
-                uiLogger.info(`AdminAssessmentList: Loaded ${data.length} assessments`)
-                setAssessments(data)
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Failed to load assessments'
-                logError(err instanceof Error ? err : new Error(errorMessage), 'AdminAssessmentList')
-                setError(errorMessage)
-                setAssessments([])
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchAssessments()
-    }, [])
-
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex justify-center p-8">
                 <Loader2 className="animate-spin" />
@@ -61,15 +30,13 @@ export default function AdminAssessmentList() {
                 <AlertCircle className="h-12 w-12 text-destructive" />
                 <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Failed to Load Assessments</h3>
-                    <p className="text-sm text-muted-foreground">{error}</p>
+                    <p className="text-sm text-muted-foreground">
+                        {error instanceof Error ? error.message : 'Unknown error'}
+                    </p>
                 </div>
                 <Button
                     variant="outline"
-                    onClick={() => {
-                        setLoading(true)
-                        setError(null)
-                        window.location.reload()
-                    }}
+                    onClick={() => window.location.reload()}
                 >
                     Try Again
                 </Button>
@@ -80,7 +47,7 @@ export default function AdminAssessmentList() {
     return (
         <div className="space-y-4">
             <div className="rounded-md border bg-white divide-y">
-                {assessments.map((assessment) => (
+                {assessments.map((assessment: any) => (
                     <div key={assessment.id} className="flex items-center justify-between p-4">
                         <div className="flex items-center gap-4">
                             <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -140,4 +107,3 @@ export default function AdminAssessmentList() {
         </div>
     )
 }
-

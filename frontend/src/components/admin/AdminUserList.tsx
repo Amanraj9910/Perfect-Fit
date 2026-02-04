@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { adminApi } from '@/lib/api'
-import { uiLogger, logError } from '@/lib/logger'
+import { useState } from 'react'
+import { useAdminUsers, useUpdateUserRole } from '@/lib/hooks/use-admin-queries'
+import { uiLogger } from '@/lib/logger'
 import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,61 +13,23 @@ interface AdminUserListProps {
 }
 
 export default function AdminUserList({ readonly = false }: AdminUserListProps) {
-    const [users, setUsers] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
     const [searchTerm, setSearchTerm] = useState('')
     const debouncedSearch = useDebounce(searchTerm, 500)
-    const [updating, setUpdating] = useState<string | null>(null)
 
-    const fetchUsers = async () => {
-        setLoading(true)
-        setError(null)
-        uiLogger.info('AdminUserList: Fetching users')
+    // Use React Query for data fetching and caching
+    const { data, isLoading, error } = useAdminUsers(page, debouncedSearch)
+    const updateRoleMutation = useUpdateUserRole()
 
-        try {
-            const res = await adminApi.getUsers(page, 10, debouncedSearch)
-
-            // Handle nested response: { users: [...], total, page, limit }
-            const usersData = res.users || res.data || []
-            const totalCount = res.total || 0
-
-            if (!Array.isArray(usersData)) {
-                uiLogger.error('getUsers returned non-array', res)
-                setUsers([])
-                setError('Invalid data format received')
-                return
-            }
-
-            uiLogger.info(`AdminUserList: Loaded ${usersData.length} users`)
-            setUsers(usersData)
-            setTotalPages(Math.ceil(totalCount / 10) || 1)
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to load users'
-            logError(err instanceof Error ? err : new Error(errorMessage), 'AdminUserList')
-            setError(errorMessage)
-            setUsers([])
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        fetchUsers()
-    }, [page, debouncedSearch])
+    const users = data?.users || []
+    const totalPages = Math.ceil((data?.total || 0) / 10) || 1
 
     const handleRoleUpdate = async (userId: string, newRole: string) => {
-        setUpdating(userId)
         try {
-            await adminApi.updateUserRole(userId, newRole)
-            setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u))
+            await updateRoleMutation.mutateAsync({ userId, role: newRole })
         } catch (error) {
             console.error(error)
             alert('Failed to update role')
-        } finally {
-            setUpdating(null)
         }
     }
 
@@ -77,6 +39,20 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
         hr: 'bg-purple-100 text-purple-800',
         recruiter: 'bg-green-100 text-green-800',
         admin: 'bg-red-100 text-red-800'
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
+                <AlertCircle className="h-12 w-12 text-destructive" />
+                <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Failed to Load Users</h3>
+                    <p className="text-sm text-muted-foreground">
+                        {error instanceof Error ? error.message : 'Unknown error'}
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -95,13 +71,13 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
             </div>
 
             <div className="rounded-md border bg-white">
-                {loading ? (
+                {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground flex justify-center">
                         <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
                 ) : (
                     <div className="divide-y">
-                        {users.map((user) => (
+                        {users.map((user: any) => (
                             <div key={user.id} className="flex items-center justify-between p-4">
                                 <div className="flex items-center gap-4">
                                     <Avatar>
@@ -121,10 +97,10 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
                                         <Select
                                             value={user.role}
                                             onValueChange={(val) => handleRoleUpdate(user.id, val)}
-                                            disabled={updating === user.id}
+                                            disabled={updateRoleMutation.isPending}
                                         >
                                             <SelectTrigger className="w-[130px]">
-                                                {updating === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
+                                                {updateRoleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="candidate">Candidate</SelectItem>
