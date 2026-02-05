@@ -1,7 +1,7 @@
 'use client'
 
 import ApplicationList from '@/components/admin/ApplicationList'
-import { useAuth } from '@/components/auth/AuthProvider'
+import { useAuth } from '@/providers/auth-provider'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'

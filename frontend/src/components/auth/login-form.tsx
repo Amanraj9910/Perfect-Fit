@@ -13,7 +13,7 @@ import {
     FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import api from "@/lib/api"
+import { useAuth } from "@/providers/auth-provider"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
@@ -28,6 +28,7 @@ const formSchema = z.object({
 
 export function LoginForm() {
     const router = useRouter()
+    const { signInWithEmail } = useAuth()
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
 
@@ -43,17 +44,17 @@ export function LoginForm() {
         setLoading(true)
         setError(null)
         try {
-            const response = await api.post("/auth/login", values)
-            const { access_token } = response.data
-            localStorage.setItem("accessToken", access_token)
-            router.push("/") // Redirect to dashboard/home
+            const result = await signInWithEmail(values.email, values.password)
+
+            if (result.error) {
+                console.error(result.error)
+                setError(result.error.message || "Invalid email or password")
+            } else {
+                router.push("/") // Redirect to dashboard/home
+            }
         } catch (err: any) {
             console.error(err)
-            if (err.response?.status === 401 || err.response?.status === 400 || err.response?.status === 500) {
-                setError("Invalid email or password")
-            } else {
-                setError("An unexpected error occurred. Please try again.")
-            }
+            setError("An unexpected error occurred. Please try again.")
         } finally {
             setLoading(false)
         }

@@ -73,7 +73,7 @@ export default function AdminPage() {
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
                 <Tabs defaultValue="dashboard" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
+                    <TabsList className="grid w-full grid-cols-5 lg:w-[650px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
                         </TabsTrigger>
