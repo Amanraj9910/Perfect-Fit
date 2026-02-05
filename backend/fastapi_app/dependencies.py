@@ -1,4 +1,5 @@
 import os
+import jwt
 from fastapi import Header, HTTPException, status
 from gotrue import AsyncGoTrueClient
 from postgrest import AsyncPostgrestClient
@@ -48,6 +49,13 @@ if not url or not key:
 
 # Use our custom client instead of the official 'supabase' package
 supabase = CustomSupabaseClient(url, key)
+
+# JWT Configuration for local verification
+JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
+SUPABASE_ALGORITHM = "HS256"
+
+if not JWT_SECRET:
+    auth_logger.warning("SUPABASE_JWT_SECRET not set - falling back to API verification")
 
 def get_supabase():
     return supabase
@@ -109,8 +117,19 @@ async def verify_admin(x_supabase_auth: str = Header(None)):
 
 from fastapi import Depends
 
+class LocalUser:
+    """Simple user object for locally verified tokens."""
+    def __init__(self, id: str, email: str = None, role: str = None):
+        self.id = id
+        self.email = email
+        self.role = role
+
 async def get_current_user(x_supabase_auth: str = Header(None)):
-    """Get current authenticated user without role check."""
+    """
+    Get current authenticated user without role check.
+    Uses local JWT verification for improved latency (~200ms saved per request).
+    Falls back to Supabase API if JWT_SECRET is not configured.
+    """
     if not x_supabase_auth:
         auth_logger.warning("Auth attempt without token")
         raise HTTPException(
@@ -118,6 +137,35 @@ async def get_current_user(x_supabase_auth: str = Header(None)):
             detail="Missing Auth Token"
         )
     
+    # Try local verification first (faster)
+    if JWT_SECRET:
+        try:
+            payload = jwt.decode(
+                x_supabase_auth,
+                JWT_SECRET,
+                algorithms=[SUPABASE_ALGORITHM],
+                audience="authenticated"
+            )
+            user_id = payload.get("sub")
+            email = payload.get("email")
+            
+            if not user_id:
+                raise jwt.InvalidTokenError("Missing 'sub' claim")
+            
+            auth_logger.debug(f"Local JWT verification success for user: {user_id}")
+            return LocalUser(id=user_id, email=email)
+            
+        except jwt.ExpiredSignatureError:
+            auth_logger.warning("Token expired (local verification)")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired"
+            )
+        except jwt.InvalidTokenError as e:
+            # Local verification failed - fall through to API verification
+            auth_logger.debug(f"Local JWT failed, trying API fallback: {e}")
+    
+    # Fallback to Supabase API verification
     try:
         user_response = await supabase.auth.get_user(x_supabase_auth)
         if not user_response or not user_response.user:

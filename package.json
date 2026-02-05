@@ -14,10 +14,13 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {
-    "turbo": "latest",
-    "prettier": "latest",
     "eslint": "latest",
+    "prettier": "latest",
+    "turbo": "latest",
     "typescript": "latest"
   },
-  "packageManager": "pnpm@8.15.4"
+  "packageManager": "pnpm@8.15.4",
+  "dependencies": {
+    "sonner": "^2.0.7"
+  }
 }

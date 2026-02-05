@@ -113,9 +113,22 @@ export default function AdminApplicationsList() {
                                 )}
                                 <div className="flex gap-3 text-sm">
                                     {app.resume_url && (
-                                        <a href={app.resume_url} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline">
+                                        <button
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                try {
+                                                    const { storageApi } = await import("@/lib/api");
+                                                    const url = await storageApi.signUrl(app.resume_url!, true);
+                                                    window.open(url, '_blank');
+                                                } catch (err) {
+                                                    console.error("Failed to download resume", err);
+                                                    window.open(app.resume_url, '_blank');
+                                                }
+                                            }}
+                                            className="flex items-center text-blue-600 hover:underline focus:outline-none"
+                                        >
                                             <FileText className="h-4 w-4 mr-1" /> Resume
-                                        </a>
+                                        </button>
                                     )}
                                     {app.linkedin_url && (
                                         <a href={app.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline">

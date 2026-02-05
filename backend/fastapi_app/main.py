@@ -9,6 +9,7 @@ from routers import admin
 from routers import jobs
 from routers import candidates
 from routers import applications
+from routers import storage
 from core.logging import (
     api_logger,
     error_logger,
@@ -92,6 +93,7 @@ app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(candidates.router, prefix="/api/candidates", tags=["candidates"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
+app.include_router(storage.router, prefix="/api/storage", tags=["storage"])
 
 
 @app.get("/")
@@ -111,4 +113,3 @@ async def startup_event():
 async def shutdown_event():
     """Log application shutdown."""
     api_logger.info("👋 Perfect Fit Admin API shutting down...")
-

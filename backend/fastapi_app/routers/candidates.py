@@ -67,54 +67,9 @@ def get_blob_service_client():
         raise ValueError("AZURE_STORAGE_CONNECTION_STRING not set")
     return BlobServiceClient.from_connection_string(connect_str)
 
-def sign_blob_url(blob_url: str) -> str:
-    """
-    Appends a SAS token to the blob URL to allow secure read access.
-    """
-    if not blob_url:
-        return blob_url
-        
-    try:
-        connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-        if not connect_str:
-            api_logger.warning("AZURE_STORAGE_CONNECTION_STRING not set, cannot sign URL")
-            return blob_url
+from core.storage import sign_blob_url
 
-        # Parse connection string to get account name and key
-        params = dict(item.split('=', 1) for item in connect_str.split(';') if '=' in item)
-        account_name = params.get('AccountName')
-        account_key = params.get('AccountKey')
-
-        if not account_name or not account_key:
-             api_logger.warning("Could not parse AccountName or AccountKey from connection string")
-             return blob_url
-
-        # Extract container and blob name from URL
-        try:
-            from urllib.parse import urlparse
-            parsed = urlparse(blob_url)
-            path_parts = parsed.path.lstrip('/').split('/', 1)
-            if len(path_parts) != 2:
-                return blob_url
-            
-            container_name, blob_name = path_parts
-        except Exception:
-            return blob_url
-
-        sas_token = generate_blob_sas(
-            account_name=account_name,
-            container_name=container_name,
-            blob_name=blob_name,
-            account_key=account_key,
-            permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=1)
-        )
-        
-        return f"{blob_url}?{sas_token}"
-        
-    except Exception as e:
-        log_error(e, context="sign_blob_url")
-        return blob_url
+# Removed duplicate sign_blob_url implementation
 
 async def delete_blob_from_url(blob_url: str):
     """Deletes a blob given its full URL."""

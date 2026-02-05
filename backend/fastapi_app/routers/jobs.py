@@ -45,6 +45,7 @@ class JobRoleUpdate(BaseModel):
     department: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = Field(None, min_length=10)
     requirements: Optional[str] = Field(None, min_length=10)
+    current_version: Optional[int] = Field(None, description="Current version for optimistic locking")
 
 
 class JobRoleResponse(BaseModel):
@@ -60,6 +61,7 @@ class JobRoleResponse(BaseModel):
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None
     rejection_reason: Optional[str] = None
+    version: int = 1  # For optimistic locking
 
 
 class RejectRequest(BaseModel):
@@ -204,7 +206,8 @@ async def create_job(
             "requirements": job.requirements,
             "created_by": user["id"],
             "status": "pending",
-            "is_open": True
+            "is_open": True,
+            "version": 1  # Initialize version for optimistic locking
         }).execute()
         
         if not result.data:
@@ -401,11 +404,22 @@ async def update_job(
                 detail="Not authorized to update this job"
             )
         
-        # Build update dict
-        update_dict = {k: v for k, v in updates.dict().items() if v is not None}
+        # Build update dict (exclude current_version from update data)
+        update_dict = {k: v for k, v in updates.dict().items() if v is not None and k != "current_version"}
         
         if not update_dict:
             return job
+        
+        # Optimistic Locking: Check version if provided
+        current_version = updates.current_version
+        db_version = job.get("version", 1)
+        
+        if current_version is not None and current_version != db_version:
+            api_logger.warning(f"Version conflict for job {job_id}: client={current_version}, db={db_version}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This job has been modified by another user. Please refresh and try again."
+            )
         
         # If job was approved, reset to pending (edit-resets-approval)
         was_approved = job["status"] == "approved"
@@ -416,11 +430,28 @@ async def update_job(
             api_logger.info(f"Job {job_id} status reset to pending due to edit")
         
         update_dict["updated_at"] = datetime.utcnow().isoformat()
+        update_dict["version"] = db_version + 1  # Increment version
         
-        result = await supabase.table("job_roles")\
-            .update(update_dict)\
-            .eq("id", job_id)\
-            .execute()
+        # Conditional update with version check for atomicity
+        query = supabase.table("job_roles").update(update_dict).eq("id", job_id)
+        if current_version is not None:
+            query = query.eq("version", current_version)
+        
+        result = await query.execute()
+        
+        # Check if update succeeded (might fail due to race condition)
+        if not result.data:
+            # Check if job still exists
+            check = await supabase.table("job_roles").select("version").eq("id", job_id).single().execute()
+            if check.data:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This job has been modified by another user. Please refresh and try again."
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Job not found"
+            )
         
         # If status was reset, create new approval request
         if was_approved:
@@ -431,7 +462,7 @@ async def update_job(
                 "reason": "Re-approval required after edit"
             }).execute()
         
-        db_logger.info(f"Job updated: {job_id}")
+        db_logger.info(f"Job updated: {job_id} (version: {update_dict['version']})")
         return result.data[0] if result.data else job
         
     except HTTPException:
@@ -519,14 +550,16 @@ async def approve_job(
             )
         
         now = datetime.utcnow().isoformat()
+        db_version = existing.data.get("version", 1)
         
-        # Update job status
+        # Update job status with version increment
         result = await supabase.table("job_roles")\
             .update({
                 "status": "approved",
                 "approved_by": user["id"],
                 "approved_at": now,
-                "rejection_reason": None
+                "rejection_reason": None,
+                "version": db_version + 1
             })\
             .eq("id", job_id)\
             .execute()
@@ -586,14 +619,16 @@ async def reject_job(
             )
         
         now = datetime.utcnow().isoformat()
+        db_version = existing.data.get("version", 1)
         
-        # Update job status
+        # Update job status with version increment
         result = await supabase.table("job_roles")\
             .update({
                 "status": "rejected",
                 "rejection_reason": request.reason,
                 "approved_by": None,
-                "approved_at": None
+                "approved_at": None,
+                "version": db_version + 1
             })\
             .eq("id", job_id)\
             .execute()

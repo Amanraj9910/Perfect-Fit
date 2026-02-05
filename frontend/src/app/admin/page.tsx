@@ -2,8 +2,10 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/providers/auth-provider'
 import { useAdminStats } from '@/lib/hooks/use-admin-queries'
+import { subscribeToAdminUpdates } from '@/lib/realtime'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Shield, Loader2, LogOut, LayoutDashboard, Users, FileText, Briefcase } from 'lucide-react'
@@ -16,10 +18,23 @@ import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
 
 export default function AdminPage() {
     const router = useRouter()
+    const queryClient = useQueryClient()
     const { user, profile, loading: authLoading, profileLoaded, signOut, isAdmin } = useAuth()
 
     // Use React Query for stats - cached across tab switches
     const { data: stats, isLoading: statsLoading } = useAdminStats()
+
+    // Subscribe to realtime updates for live data sync
+    useEffect(() => {
+        if (!user || !isAdmin) return
+
+        const cleanup = subscribeToAdminUpdates(queryClient, (message) => {
+            console.log('[Realtime]', message)
+            // TODO: Add toast notification - install sonner: npm install sonner
+        })
+
+        return cleanup
+    }, [user, isAdmin, queryClient])
 
     useEffect(() => {
         if (!authLoading && profileLoaded) {

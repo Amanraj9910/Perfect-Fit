@@ -151,6 +151,7 @@ export interface JobRoleUpdate {
     department?: string
     description?: string
     requirements?: string
+    current_version?: number  // For optimistic locking
 }
 
 export interface JobRole {
@@ -166,6 +167,7 @@ export interface JobRole {
     approved_by?: string
     approved_at?: string
     rejection_reason?: string
+    version: number  // For optimistic locking
 }
 
 export interface ApplicationInput {
@@ -275,4 +277,14 @@ export const applicationsApi = {
             method: 'PUT',
             body: JSON.stringify({ status, feedback })
         })
+}
+
+export const storageApi = {
+    signUrl: async (url: string, download: boolean = false) => {
+        const response = await fetchWithAuth('/api/storage/sign', {
+            method: 'POST',
+            body: JSON.stringify({ url, download })
+        });
+        return response.url;
+    }
 }

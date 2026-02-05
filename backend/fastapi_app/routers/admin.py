@@ -106,6 +106,8 @@ async def get_users(
     search: Optional[str] = None,
     supabase = Depends(get_supabase)
 ):
+    from core.storage import sign_blob_url
+    
     start = (page - 1) * limit
     end = start + limit - 1
     
@@ -118,8 +120,16 @@ async def get_users(
     query = query.order("created_at", desc=True).range(start, end)
     result = await query.execute()
     
+    # Sign avatar URLs
+    users = []
+    if result.data:
+        for user in result.data:
+            if user.get('avatar_url'):
+                user['avatar_url'] = sign_blob_url(user['avatar_url'])
+            users.append(user)
+    
     return {
-        "data": result.data,
+        "data": users,
         "total": result.count,
         "page": page,
         "limit": limit
@@ -193,6 +203,11 @@ async def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
     assessment = assessment_res.data
     profile = assessment.get('profiles')
     
+    # Sign profile pic if exists
+    if profile and profile.get('avatar_url'):
+        from core.storage import sign_blob_url
+        profile['avatar_url'] = sign_blob_url(profile['avatar_url'])
+    
     # 2. Fetch Scores
     scores_res = await supabase.table("assessment_scores").select("*").eq("assessment_id", id).maybe_single().execute()
     scores = scores_res.data
@@ -213,7 +228,7 @@ async def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supaba
     """
     Generate a fresh SAS token for the audio file associated with a specific response.
     """
-    from urllib.parse import unquote
+    from core.storage import sign_blob_url
     
     api_logger.info(f"Fetching audio SAS for assessment={id}, response={response_id}")
     
@@ -230,67 +245,9 @@ async def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supaba
          
     saved_url = response_record.data['audio_url']
     section = response_record.data.get('section', 'unknown')
-    api_logger.debug(f"Found audio URL for section '{section}': {saved_url[:80]}...")
     
-    # 2. Parse blob name from stored URL
-    # URL format: https://<account>.blob.core.windows.net/<container>/<blob_path>?<sas_token>
-    blob_name = saved_url
+    sas_url = sign_blob_url(saved_url)
     
-    try:
-        if "core.windows.net" in saved_url:
-            # Extract path after container name
-            container_part = f"/{CONTAINER_NAME}/"
-            if container_part in saved_url:
-                file_part = saved_url.split(container_part)[-1]
-            else:
-                # Try alternative container format (without leading slash)
-                file_part = saved_url.split(f"{CONTAINER_NAME}/")[-1]
-            
-            # Remove SAS token query params
-            blob_name = file_part.split("?")[0]
-            
-            # Decode URL encoding (e.g., %20 -> space)
-            blob_name = unquote(blob_name)
-        
-        api_logger.debug(f"Parsed blob name: {blob_name}")
-        
-    except Exception as e:
-        api_logger.error(f"Failed to parse blob name from URL: {e}")
-        raise HTTPException(status_code=500, detail="Invalid audio record format")
-    
-    # 3. Verify blob exists (optional but recommended)
-    try:
-        blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
-        blob_client = blob_service_client.get_blob_client(container=CONTAINER_NAME, blob=blob_name)
-        
-        if not blob_client.exists():
-            api_logger.warning(f"Blob does not exist: {blob_name}")
-            raise HTTPException(status_code=404, detail="Audio file not found in storage")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        api_logger.warning(f"Could not verify blob existence: {e}")
-        # Continue anyway - let it fail at playback if blob doesn't exist
-
-    # 4. Generate fresh SAS Token
-    try:
-        sas_token = generate_blob_sas(
-            account_name=blob_service_client.account_name,
-            container_name=CONTAINER_NAME,
-            blob_name=blob_name,
-            account_key=blob_service_client.credential.account_key,
-            permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=1)
-        )
-        
-        # Construct full SAS URL
-        sas_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{CONTAINER_NAME}/{blob_name}?{sas_token}"
-        
-        api_logger.info(f"Generated SAS URL for {section} (expires in 1 hour)")
-        return {"audio_url": sas_url, "section": section}
-        
-    except Exception as e:
-        api_logger.error(f"SAS Generation Error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate audio link")
+    api_logger.info(f"Generated SAS URL for {section}")
+    return {"audio_url": sas_url, "section": section}
 

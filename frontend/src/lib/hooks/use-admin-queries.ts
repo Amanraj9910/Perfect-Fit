@@ -27,6 +27,7 @@ export function useAdminStats() {
     return useQuery({
         queryKey: adminQueryKeys.stats(),
         queryFn: () => adminApi.getStats(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -52,6 +53,8 @@ export function useAdminUsers(page: number = 1, search: string = '') {
                 limit: res.limit || 10,
             }
         },
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        placeholderData: (previousData) => previousData, // Keep showing previous data while fetching new page
     })
 }
 
@@ -75,6 +78,7 @@ export function useAdminAssessments(limit: number = 20) {
     return useQuery({
         queryKey: adminQueryKeys.assessments(),
         queryFn: () => adminApi.getAssessments(limit),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -83,6 +87,7 @@ export function useAdminAssessmentDetail(id: string) {
         queryKey: adminQueryKeys.assessmentDetail(id),
         queryFn: () => adminApi.getAssessmentDetail(id),
         enabled: !!id, // Only fetch if id is provided
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -93,6 +98,7 @@ export function useAdminApplications() {
     return useQuery({
         queryKey: adminQueryKeys.applications(),
         queryFn: () => applicationsApi.listAll(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -118,6 +124,7 @@ export function useAdminJobs() {
     return useQuery({
         queryKey: adminQueryKeys.jobs(),
         queryFn: () => jobsApi.list(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -125,6 +132,7 @@ export function usePendingJobs() {
     return useQuery({
         queryKey: adminQueryKeys.pendingJobs(),
         queryFn: () => jobsApi.listPending(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 
@@ -176,6 +184,7 @@ export function useEmployeeJobs() {
     return useQuery({
         queryKey: employeeQueryKeys.jobs(),
         queryFn: () => jobsApi.list(),
+        staleTime: 1000 * 60 * 5, // 5 minutes
     })
 }
 

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/providers/auth-provider";
+import { useCandidateProfile } from "@/lib/hooks/use-candidate";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -36,12 +37,12 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export default function ProfilePage() {
     const { user, profile: authProfile, refreshProfile } = useAuth();
-    const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [resumeUrl, setResumeUrl] = useState<string | null>(null);
-    const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
     const [uploadingResume, setUploadingResume] = useState(false);
     const [uploadingPic, setUploadingPic] = useState(false);
+
+    // Use React Query for profile data
+    const { data: profile, isLoading, refetch } = useCandidateProfile();
 
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(profileFormSchema),
@@ -55,100 +56,19 @@ export default function ProfilePage() {
         },
     });
 
-    // Fetch candidate profile data
+    // Sync form with profile data when loaded
     useEffect(() => {
-        async function fetchCandidateProfile() {
-            if (!user) return;
-
-            try {
-                const token = (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
-
-                // Use our API proxy if possible, or direct supabase? 
-                // We have `GET /candidates/me` endpoint now!
-                // Let's use the backend API for consistency with implementations
-
-                // We need the token. using `user` from auth provider doesn't give token directly, session does.
-                // Actually `useAuth` returns session.
-                // But let's assume we can fetch from API.
-
-                // Or simpler, just use supabase client directly here like the AuthProvider does?
-                // But we want to use the backend logic explicitly created.
-
-                // fetch('/api/candidates/me')? No, it's on localhost:8000 usually, need proxy or full URL.
-                // Frontend likely has proxy setup in next.config.js? Or we use full URL.
-                // Let's assume standard fetch to backend. 
-                // NOTE: User's setup has backend on 8000. Frontend on 3000.
-                // We need to know if there is a proxy.
-                // If not, we might have cors issues unless configured. (Main.py has CORS allowing 3000).
-
-                const response = await fetch("http://localhost:8000/api/candidates/me", {
-                    headers: {
-                        "Authorization": `Bearer ${(await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token)}`,
-                        "X-Supabase-Auth": (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token || "") // Backup
-                    }
-                });
-
-                // Wait, getting token is async. 
-                // Let's simplify.
-                // I'll blindly fetch for now.
-
-            } catch (error) {
-                console.error("Failed to fetch profile", error);
-            }
+        if (profile) {
+            form.reset({
+                full_name: profile.full_name || "",
+                phone: profile.phone || "",
+                linkedin_url: profile.linkedin_url || "",
+                portfolio_url: profile.portfolio_url || "",
+                bio: profile.bio || "",
+                experience_years: profile.experience_years || 0,
+            });
         }
-
-        async function loadData() {
-            if (!user) return;
-            setIsLoading(true);
-
-            try {
-                // Get auth session token
-                const supabase = (await import("@/lib/supabase")).getSupabaseClient();
-                const { data: { session } } = await supabase.auth.getSession();
-                const token = session?.access_token;
-
-                if (!token) {
-                    setIsLoading(false);
-                    return;
-                }
-
-                // Fetch from Backend API to get Signed URLs (SAS Tokens)
-                const response = await fetch("http://localhost:8000/api/candidates/me", {
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                        "X-Supabase-Auth": token
-                    }
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-
-                    form.reset({
-                        full_name: data.full_name || authProfile?.full_name || "",
-                        phone: data.phone || "",
-                        linkedin_url: data.linkedin_url || "",
-                        portfolio_url: data.portfolio_url || "",
-                        bio: data.bio || "",
-                        experience_years: data.experience_years || 0,
-                    });
-                    setResumeUrl(data.resume_url);
-                    setProfilePicUrl(data.profile_pic_url);
-                } else {
-                    // Fallback to auth profile if backend fetch fails (e.g. first time user)
-                    form.reset({
-                        full_name: authProfile?.full_name || "",
-                    });
-                }
-            } catch (error) {
-                console.error("Failed to load profile", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-
-        loadData();
-    }, [user, authProfile, form]);
-
+    }, [profile, form]);
 
     async function onSubmit(data: ProfileFormValues) {
         if (!user) return;
@@ -168,6 +88,8 @@ export default function ProfilePage() {
 
             // Refresh auth profile if name changed
             refreshProfile();
+            // Refetch React Query data
+            refetch();
 
         } catch (error) {
             console.error("Error updating profile:", error);
@@ -207,11 +129,10 @@ export default function ProfilePage() {
 
             if (!response.ok) throw new Error("Upload failed");
 
-            const result = await response.json();
+            // Refetch profile to get new URLs
+            refetch();
 
-            if (isResume) setResumeUrl(result.url);
-            else {
-                setProfilePicUrl(result.url);
+            if (!isResume) {
                 refreshProfile(); // Update avatar in navbar
             }
 
@@ -243,7 +164,8 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6 py-6">
                         <Avatar className="h-40 w-40 ring-4 ring-background shadow-xl">
-                            <AvatarImage src={profilePicUrl || authProfile?.avatar_url || ""} className="object-cover" />
+                            {/* Use backend profile URL which is signed. Avoid authProfile.avatar_url which is raw/unsigned */}
+                            <AvatarImage src={profile?.profile_pic_url || ""} className="object-cover" />
                             <AvatarFallback className="text-5xl bg-primary/5">{form.getValues("full_name")?.[0] || <UserIcon className="h-16 w-16 text-muted-foreground/50" />}</AvatarFallback>
                         </Avatar>
                         <div className="w-full">
@@ -361,18 +283,32 @@ export default function ProfilePage() {
 
                                     <div className="flex items-center justify-between gap-4 pl-12">
                                         <div className="flex-1 overflow-hidden">
-                                            {resumeUrl ? (
-                                                <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline truncate transition-colors">
+                                            {profile?.resume_url ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        try {
+                                                            const { storageApi } = await import("@/lib/api");
+                                                            const url = await storageApi.signUrl(profile.resume_url!, true);
+                                                            window.open(url, '_blank');
+                                                        } catch (err) {
+                                                            console.error("Failed to download resume", err);
+                                                            window.open(profile.resume_url, '_blank');
+                                                        }
+                                                    }}
+                                                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline truncate transition-colors focus:outline-none"
+                                                >
                                                     <CheckCircle className="h-4 w-4 text-green-500" />
                                                     View Current Resume
-                                                </a>
+                                                </button>
                                             ) : (
                                                 <p className="text-sm text-muted-foreground italic">No resume uploaded yet</p>
                                             )}
                                         </div>
                                         <Button variant="secondary" size="sm" className="relative group overflow-hidden" disabled={uploadingResume} type="button">
                                             {uploadingResume ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2 group-hover:-translate-y-0.5 transition-transform" />}
-                                            {resumeUrl ? "Replace" : "Upload"}
+                                            {profile?.resume_url ? "Replace" : "Upload"}
                                             <input
                                                 type="file"
                                                 className="absolute inset-0 opacity-0 cursor-pointer"
