@@ -54,13 +54,14 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    const { data: { session } } = await supabase.auth.getSession()
+    // Use getUser() to validate the user token securely, silencing the warning
+    const { data: { user }, error } = await supabase.auth.getUser()
 
     // Protected Routes Definition
     const path = request.nextUrl.pathname
 
     // 1. If NOT logged in, block access to protected portals
-    if (!session) {
+    if (!user || error) {
         if (path.startsWith('/admin') || path.startsWith('/hr') || path.startsWith('/employee') || path.startsWith('/dashboard') || path.startsWith('/profile')) {
             return NextResponse.redirect(new URL('/auth', request.url))
         }
@@ -68,14 +69,14 @@ export async function middleware(request: NextRequest) {
     }
 
     // 2. If logged in, enforce role-based boundaries
-    if (session) {
+    if (user) {
         // We need to fetch the role. 
         // Note: In a high-traffic app, we might put role in user_metadata or huge cookie to avoid DB hit here.
         // For now, we query. 
         const { data: profile } = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', session.user.id)
+            .eq('id', user.id)
             .single()
 
         const role = profile?.role || 'candidate'

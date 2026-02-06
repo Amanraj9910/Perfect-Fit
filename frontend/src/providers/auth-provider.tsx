@@ -71,22 +71,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         // Get initial session and user securely
         const initAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            setSession(session)
+            try {
+                const { data: { session } } = await supabase.auth.getSession()
+                setSession(session)
 
-            // Use getUser() to get the user object securely to avoid warning
-            const { data: { user } } = await supabase.auth.getUser()
-            setUser(user)
+                // Use getUser() to get the user object securely to avoid warning
+                const { data: { user } } = await supabase.auth.getUser()
+                setUser(user)
 
-            if (user) {
-                // Force a refresh to ensure server components (cookies) match client state
-                router.refresh()
-                const profileData = await fetchProfile(user.id)
-                setProfile(profileData)
-            } else {
-                setProfileLoaded(true) // No user, no profile to load
+                if (user) {
+                    // Force a refresh to ensure server components (cookies) match client state
+                    router.refresh()
+                    try {
+                        const profileData = await fetchProfile(user.id)
+                        setProfile(profileData)
+                    } catch (err) {
+                        console.error("Profile fetch failed in initAuth:", err)
+                    }
+                } else {
+                    setProfileLoaded(true) // No user, no profile to load
+                }
+            } catch (e) {
+                console.error("Auth initialization failed:", e)
+            } finally {
+                setLoading(false)
             }
-            setLoading(false)
         }
 
         initAuth()
@@ -94,29 +103,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event: string, newSession: Session | null) => {
-                setSession(newSession)
+                try {
+                    setSession(newSession)
 
-                // For onAuthStateChange, we also want to avoid the warning
-                // newSession?.user triggers it.
-                // However, doing a network request on every event (like TOKEN_REFRESH) might be much.
-                // But to fully comply and silence it:
-                if (newSession) {
-                    const { data: { user } } = await supabase.auth.getUser()
-                    setUser(user)
-                    if (user) {
-                        const profileData = await fetchProfile(user.id)
-                        setProfile(profileData)
+                    if (newSession) {
+                        const { data: { user } } = await supabase.auth.getUser()
+                        setUser(user)
+                        if (user) {
+                            try {
+                                const profileData = await fetchProfile(user.id)
+                                setProfile(profileData)
+                            } catch (err) {
+                                console.error("Profile fetch failed in auth change:", err)
+                            }
+                        } else {
+                            setProfile(null)
+                            setProfileLoaded(true)
+                        }
                     } else {
-                        // Should happen if getUser fails but session exists? Unlikely.
+                        setUser(null)
                         setProfile(null)
                         setProfileLoaded(true)
                     }
-                } else {
-                    setUser(null)
-                    setProfile(null)
-                    setProfileLoaded(true)
+                } catch (e) {
+                    console.error("Auth change handler failed:", e)
+                } finally {
+                    setLoading(false)
                 }
-                setLoading(false)
             }
         )
 
