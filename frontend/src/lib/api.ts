@@ -44,15 +44,31 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}))
-            const errorMessage = errorBody.detail || `API Error: ${response.statusText}`
-            logApiError(method, endpoint, `HTTP ${response.status}`, errorBody)
+
+            if (response.status === 422) {
+                console.error(`[API] Validation Error: ${JSON.stringify(errorBody.detail, null, 2)}`)
+            } else {
+                console.error(`[API] HTTP Error ${response.status}: ${JSON.stringify(errorBody, null, 2)}`)
+            }
+
+            // Log detailed error to internal logger
+            logApiError(method, endpoint, errorBody.detail || errorBody, response.status)
 
             // Show toast for visible errors (excluding 404s which might be handled gracefully in UI)
+            const errorMessage = Array.isArray(errorBody.detail)
+                ? errorBody.detail.map((e: any) => `${e.loc?.join('.')}: ${e.msg}`).join(', ')
+                : errorBody.detail || `API Error: ${response.statusText}`
+
             if (response.status !== 404) {
                 toast.error(errorMessage)
             }
 
-            throw new Error(errorMessage)
+            const error = new Error(errorMessage)
+            // @ts-ignore
+            error.status = response.status
+            // @ts-ignore
+            error.detail = errorBody.detail
+            throw error
         }
 
         const data = await response.json()

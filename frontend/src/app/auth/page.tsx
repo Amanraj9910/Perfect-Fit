@@ -33,7 +33,7 @@ const MicrosoftIcon = () => (
 
 export default function AuthPage() {
     const router = useRouter();
-    const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithAzure, user, loading: authLoading } = useAuth();
+    const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithAzure, user, profile, loading: authLoading } = useAuth();
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -49,17 +49,6 @@ export default function AuthPage() {
     const [lastName, setLastName] = useState('');
     const [signupEmail, setSignupEmail] = useState('');
     const [signupPassword, setSignupPassword] = useState('');
-
-
-
-    // Handle redirect after successful login
-    useEffect(() => {
-        console.log('AuthPage Effect Triggered:', { user: !!user, authLoading, isLoggingIn });
-        if (user && !authLoading && isLoggingIn) {
-            console.log('Redirecting to /auth/redirect...');
-            router.push('/auth/redirect');
-        }
-    }, [user, authLoading, isLoggingIn, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();

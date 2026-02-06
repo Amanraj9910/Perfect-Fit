@@ -22,8 +22,7 @@ export function Navbar() {
 
     const handleSignOut = async () => {
         await signOut();
-        router.push('/auth');
-        router.refresh();
+        router.replace('/auth');
     };
 
     // Helper to determine if link is active
@@ -51,12 +50,14 @@ export function Navbar() {
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-6">
                     {/* Public Links */}
-                    <Link
-                        href="/jobs"
-                        className={`text-sm font-medium transition-colors hover:text-primary ${isActive("/jobs") ? "text-primary" : "text-muted-foreground"}`}
-                    >
-                        Job Openings
-                    </Link>
+                    {(!user || profile?.role === 'candidate') && (
+                        <Link
+                            href="/jobs"
+                            className={`text-sm font-medium transition-colors hover:text-primary ${isActive("/jobs") ? "text-primary" : "text-muted-foreground"}`}
+                        >
+                            Job Openings
+                        </Link>
+                    )}
 
                     {/* Auth State */}
                     {loading ? (

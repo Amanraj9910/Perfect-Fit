@@ -192,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setProfile(null)
         setSession(null)
+        setProfileLoaded(true) // Reset to loaded so we don't block UI waiting for nothing
     }
 
     const isAdmin = !!(profile?.role && ['admin', 'hr', 'recruiter'].includes(profile.role))

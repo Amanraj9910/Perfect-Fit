@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { useEmployeeJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/lib/hooks/use-admin-queries'
 import { JobRole } from '@/lib/api'
+import { toast } from "sonner"
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -67,6 +68,24 @@ export default function EmployeePortal() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
+        // Validation
+        if (title.length < 2) {
+            toast.error("Title must be at least 2 characters")
+            return
+        }
+        if (department.length < 2) {
+            toast.error("Department must be at least 2 characters")
+            return
+        }
+        if (description.length < 10) {
+            toast.error("Description must be at least 10 characters")
+            return
+        }
+        if (requirements.length < 10) {
+            toast.error("Requirements must be at least 10 characters")
+            return
+        }
+
         try {
             if (editingJob) {
                 // Update existing job
@@ -74,6 +93,7 @@ export default function EmployeePortal() {
                     id: editingJob.id,
                     data: { title, department, description, requirements }
                 })
+                toast.success("Job updated successfully")
             } else {
                 // Create new job
                 await createJobMutation.mutateAsync({
@@ -82,11 +102,13 @@ export default function EmployeePortal() {
                     description,
                     requirements
                 })
+                toast.success("Job created successfully")
             }
             resetForm()
         } catch (err) {
             console.error('Error saving job role:', err)
-            alert(err instanceof Error ? err.message : 'Failed to save job role')
+            // Error is already handled/toasted by api.ts mostly, but if we catch it here:
+            toast.error(err instanceof Error ? err.message : 'Failed to save job role')
         }
     }
 
@@ -104,9 +126,10 @@ export default function EmployeePortal() {
 
         try {
             await deleteJobMutation.mutateAsync(id)
+            toast.success("Job deleted successfully")
         } catch (err) {
             console.error('Error deleting job role:', err)
-            alert(err instanceof Error ? err.message : 'Failed to delete job role')
+            toast.error(err instanceof Error ? err.message : 'Failed to delete job role')
         }
     }
 
