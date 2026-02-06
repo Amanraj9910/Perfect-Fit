@@ -46,6 +46,9 @@ jobs:
             mkdir -p frontend/.next/standalone/frontend/.next/static
             cp -r frontend/.next/static/* frontend/.next/standalone/frontend/.next/static/
           fi
+
+          # Copy startup script
+          cp frontend/startup.sh frontend/.next/standalone/startup.sh
           
           cd frontend/.next/standalone
           zip -r ../../../frontend.zip .
