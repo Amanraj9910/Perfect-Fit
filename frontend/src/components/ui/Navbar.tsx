@@ -26,8 +26,13 @@ export function Navbar() {
     // Helper to determine if link is active
     const isActive = (path: string) => pathname === path;
 
-    // Hide Navbar for Admin, HR, Employee as they have their own portals
-    if (profile?.role && ['admin', 'hr', 'employee'].includes(profile.role)) {
+    // Hide Navbar ONLY on portal pages, not based on role alone
+    // This allows admins/hr to see the public site header
+    const isPortalPage = pathname?.startsWith('/admin') ||
+        pathname?.startsWith('/hr') ||
+        pathname?.startsWith('/employee');
+
+    if (isPortalPage) {
         return null;
     }
 
