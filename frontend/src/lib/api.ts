@@ -1,7 +1,7 @@
 import { getSupabaseClient } from './supabase'
 import { apiLogger, logApiRequest, logApiResponse, logApiError } from './logger'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = '/backend'
 
 // Generic fetch wrapper with Auth and Logging
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
