@@ -26,8 +26,15 @@ def sign_blob_url(blob_url: str, expiry_hours: int = 1, as_attachment: bool = Fa
         
     try:
         if not AZURE_CONNECTION_STRING:
-            api_logger.warning("AZURE_STORAGE_CONNECTION_STRING not set, cannot sign URL")
-            return blob_url
+            # Attempt to reload from os.environ in case it was set after module load
+            from os import environ
+            conn_str = environ.get("AZURE_STORAGE_CONNECTION_STRING")
+            if conn_str:
+                # Update module level variable
+                globals()['AZURE_CONNECTION_STRING'] = conn_str
+            else:
+                api_logger.critical("AZURE_STORAGE_CONNECTION_STRING not set - cannot sign Blob URL")
+                return blob_url
 
         # Parse connection string to get account name and key
         params = dict(item.split('=', 1) for item in AZURE_CONNECTION_STRING.split(';') if '=' in item)
@@ -35,7 +42,7 @@ def sign_blob_url(blob_url: str, expiry_hours: int = 1, as_attachment: bool = Fa
         account_key = params.get('AccountKey')
 
         if not account_name or not account_key:
-             api_logger.warning("Could not parse AccountName or AccountKey from connection string")
+             api_logger.critical("Could not parse AccountName or AccountKey from connection string")
              return blob_url
 
         # Extract container and blob name from URL

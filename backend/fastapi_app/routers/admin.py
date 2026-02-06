@@ -210,7 +210,7 @@ async def get_assessment_detail(id: str, supabase = Depends(get_supabase)):
     
     # 2. Fetch Scores
     scores_res = await supabase.table("assessment_scores").select("*").eq("assessment_id", id).maybe_single().execute()
-    scores = scores_res.data
+    scores = scores_res.data if scores_res and scores_res.data else None
     
     # 3. Fetch Responses
     responses_res = await supabase.table("assessment_responses").select("*").eq("assessment_id", id).order("created_at").execute()

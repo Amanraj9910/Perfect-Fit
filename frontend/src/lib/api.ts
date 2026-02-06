@@ -13,15 +13,21 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const supabase = getSupabaseClient()
     const { data: { session } } = await supabase.auth.getSession()
 
-    const token = session?.access_token
+    if (!session?.access_token) {
+        apiLogger.error(`fetchWithAuth: No session found for ${endpoint}`)
+        throw new Error("Authentication required")
+    }
+
+    const token = session.access_token
 
     const headers = {
         'Content-Type': 'application/json',
-        ...(token ? { 'x-supabase-auth': token } : {}),
+        'x-supabase-auth': token,
         ...options.headers,
     }
 
     // Log request
+    console.log(`[API] Fetching: ${url}`)
     logApiRequest(method, endpoint, options.body ? JSON.parse(options.body as string) : undefined)
 
     try {

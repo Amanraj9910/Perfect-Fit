@@ -37,8 +37,11 @@ class CustomSupabaseClient:
 
 from dotenv import load_dotenv
 
-# Load environment variables (ensure .env is loaded even if main.py hasn't run yet)
-load_dotenv(dotenv_path="../../.env")
+from pathlib import Path
+
+# Load environment variables (robust absolute path)
+env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Initialize Supabase Client once
 url: str = os.environ.get("SUPABASE_URL")
