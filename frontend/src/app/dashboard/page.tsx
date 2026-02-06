@@ -42,25 +42,16 @@ export default function CandidateDashboard() {
         async function fetchApplications() {
             setLoading(true);
             try {
-                // Ensure we handle imports and potential failures gracefully
-                const supabaseModule = await import("@/lib/supabase");
-                const { data: sessionData } = await supabaseModule.getSupabaseClient().auth.getSession();
-                const token = sessionData.session?.access_token;
+                // Dynamically import api to avoid circular dependencies during SSR if any
+                // though usually safe. Using direct import at top is better but let's stick to logic flow.
+                // Better: rely on the api helper.
+                const { applicationsApi } = await import("@/lib/api");
 
-                const res = await fetch("http://localhost:8000/api/applications/me", {
-                    headers: {
-                        "X-Supabase-Auth": token || ""
-                    }
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    setApplications(data);
-                } else {
-                    console.error("Failed to fetch applications:", res.statusText);
-                }
+                const data = await applicationsApi.listMine();
+                setApplications(data);
             } catch (error) {
                 console.error("Error fetching applications", error);
+                // toast.error("Failed to load applications"); // Optional
             } finally {
                 setLoading(false);
             }

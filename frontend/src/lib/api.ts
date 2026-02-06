@@ -305,12 +305,23 @@ export const applicationsApi = {
     // List all applications (hr/admin)
     listAll: (): Promise<JobApplication[]> => fetchWithAuth('/api/applications'),
 
+    // List MY applications (candidate)
+    listMine: (): Promise<JobApplication[]> => fetchWithAuth('/api/applications/me'),
+
     // Update application status
     updateStatus: (id: string, status: string, feedback?: string) =>
         fetchWithAuth(`/api/applications/${id}/status`, {
             method: 'PUT',
             body: JSON.stringify({ status, feedback })
         })
+}
+
+export const candidateApi = {
+    getProfile: () => fetchWithAuth('/api/candidates/me'),
+    createProfile: (data: any) => fetchWithAuth('/api/candidates', {
+        method: 'POST',
+        body: JSON.stringify(data)
+    })
 }
 
 export const storageApi = {
