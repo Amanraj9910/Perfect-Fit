@@ -37,7 +37,16 @@ export async function GET(request: NextRequest) {
                 .single()
 
             // Determine redirect base URL
-            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin
+            // Determine redirect base URL
+            let siteUrl = ''
+            const host = request.headers.get('x-forwarded-host') || request.headers.get('host')
+
+            if (host) {
+                const protocol = request.headers.get('x-forwarded-proto') || 'https'
+                siteUrl = `${protocol}://${host}`
+            } else {
+                siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin
+            }
 
             // Determine redirect based on role
             let redirectPath = '/profile' // Default for candidates
