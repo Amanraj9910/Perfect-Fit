@@ -69,33 +69,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     useEffect(() => {
-        // Get initial session
-        supabase.auth.getSession().then(async ({ data }: { data: { session: Session | null } }) => {
-            const currentSession = data.session
-            setSession(currentSession)
-            setUser(currentSession?.user ?? null)
+        // Get initial session and user securely
+        const initAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession()
+            setSession(session)
 
-            if (currentSession?.user) {
+            // Use getUser() to get the user object securely to avoid warning
+            const { data: { user } } = await supabase.auth.getUser()
+            setUser(user)
+
+            if (user) {
                 // Force a refresh to ensure server components (cookies) match client state
                 router.refresh()
-                const profileData = await fetchProfile(currentSession.user.id)
+                const profileData = await fetchProfile(user.id)
                 setProfile(profileData)
             } else {
                 setProfileLoaded(true) // No user, no profile to load
             }
             setLoading(false)
-        })
+        }
+
+        initAuth()
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event: string, newSession: Session | null) => {
                 setSession(newSession)
-                setUser(newSession?.user ?? null)
 
-                if (newSession?.user) {
-                    const profileData = await fetchProfile(newSession.user.id)
-                    setProfile(profileData)
+                // For onAuthStateChange, we also want to avoid the warning
+                // newSession?.user triggers it.
+                // However, doing a network request on every event (like TOKEN_REFRESH) might be much.
+                // But to fully comply and silence it:
+                if (newSession) {
+                    const { data: { user } } = await supabase.auth.getUser()
+                    setUser(user)
+                    if (user) {
+                        const profileData = await fetchProfile(user.id)
+                        setProfile(profileData)
+                    } else {
+                        // Should happen if getUser fails but session exists? Unlikely.
+                        setProfile(null)
+                        setProfileLoaded(true)
+                    }
                 } else {
+                    setUser(null)
                     setProfile(null)
                     setProfileLoaded(true)
                 }
@@ -109,23 +126,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signInWithEmail = async (email: string, password: string) => {
         setLoading(true)
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        })
-        if (data.session) {
-            setSession(data.session)
-            setUser(data.session.user)
-            // Reset profile loaded state so consumers know to wait
-            setProfileLoaded(false)
-            // Trigger profile fetch immediately
-            fetchProfile(data.session.user.id).then(p => setProfile(p))
-            toast.success("Signed in successfully")
-        } else if (error) {
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            })
+            if (data.session) {
+                setSession(data.session)
+                setUser(data.session.user)
+                // Reset profile loaded state so consumers know to wait
+                setProfileLoaded(false)
+
+                // Trigger profile fetch immediately and wait for it
+                // We use a try-catch here specifically for profile fetch to not break the login if profile fails
+                try {
+                    const profile = await fetchProfile(data.session.user.id);
+                    setProfile(profile);
+                } catch (profileError) {
+                    console.error("Profile fetch failed during login:", profileError);
+                    // proceeding without profile, keeping user
+                }
+
+                toast.success("Signed in successfully")
+            } else if (error) {
+                toast.error(error.message)
+            }
+            return { data, error }
+        } catch (err: any) {
+            console.error("Unexpected error during sign in:", err)
+            toast.error("An unexpected error occurred")
+            return { data: { user: null, session: null }, error: err }
+        } finally {
             setLoading(false)
-            toast.error(error.message)
         }
-        return { data, error }
     }
 
     const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
@@ -188,11 +221,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function signOut() {
-        await supabase.auth.signOut()
-        setUser(null)
-        setProfile(null)
-        setSession(null)
-        setProfileLoaded(true) // Reset to loaded so we don't block UI waiting for nothing
+        try {
+            await supabase.auth.signOut()
+        } catch (error) {
+            console.error("Error signing out:", error)
+        } finally {
+            setUser(null)
+            setProfile(null)
+            setSession(null)
+            setProfileLoaded(true) // Reset to loaded so we don't block UI waiting for nothing
+            router.refresh() // Ensure server components are aware of signout
+        }
     }
 
     const isAdmin = !!(profile?.role && ['admin', 'hr', 'recruiter'].includes(profile.role))

@@ -41,6 +41,22 @@ export default function AuthPage() {
 
     // Login state
     const [loginEmail, setLoginEmail] = useState('');
+
+    useEffect(() => {
+        // Redirect if already logged in
+        if (!authLoading && user && profile) {
+            const role = profile.role || 'candidate';
+            if (['admin', 'hr', 'recruiter'].includes(role)) {
+                router.push('/admin');
+            } else if (role === 'employee') {
+                router.push('/employee');
+            } else {
+                router.push('/dashboard');
+            }
+        }
+    }, [user, profile, authLoading, router]);
+
+    // Login state
     const [loginPassword, setLoginPassword] = useState('');
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 

@@ -25,16 +25,28 @@ interface Application {
 }
 
 export default function CandidateDashboard() {
-    const { user, profile, session } = useAuth();
+    const { user, profile, session, loading: authLoading } = useAuth();
     const [applications, setApplications] = useState<Application[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // If auth is still loading, do nothing yet
+        if (authLoading) return;
+
+        // If auth finished but no user, stop local loading (redirect usually handles this)
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
         async function fetchApplications() {
-            if (!user) return;
             setLoading(true);
             try {
-                const token = await (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
+                // Ensure we handle imports and potential failures gracefully
+                const supabaseModule = await import("@/lib/supabase");
+                const { data: sessionData } = await supabaseModule.getSupabaseClient().auth.getSession();
+                const token = sessionData.session?.access_token;
+
                 const res = await fetch("http://localhost:8000/api/applications/me", {
                     headers: {
                         "X-Supabase-Auth": token || ""
@@ -44,6 +56,8 @@ export default function CandidateDashboard() {
                 if (res.ok) {
                     const data = await res.json();
                     setApplications(data);
+                } else {
+                    console.error("Failed to fetch applications:", res.statusText);
                 }
             } catch (error) {
                 console.error("Error fetching applications", error);
@@ -53,9 +67,9 @@ export default function CandidateDashboard() {
         }
 
         fetchApplications();
-    }, [user]);
+    }, [user, authLoading]);
 
-    if (loading) {
+    if (authLoading || loading) {
         return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
 
