@@ -51,6 +51,9 @@ jobs:
           cp frontend/startup.sh frontend/.next/standalone/startup.sh
           
           cd frontend/.next/standalone
+          # Update package.json to run node server.js instead of next start
+          sed -i 's/"start": "next start"/"start": "node server.js"/' package.json
+          
           zip -r ../../../frontend.zip .
 
       - name: Deploy to Azure Web App
