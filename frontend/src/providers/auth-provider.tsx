@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { createClient, getSupabaseClient } from '@/lib/supabase'
 import { toast } from "sonner"
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [session, setSession] = useState<Session | null>(null)
     const [loading, setLoading] = useState(true)
     const [profileLoaded, setProfileLoaded] = useState(false)
+    const router = useRouter()
 
     async function fetchProfile(userId: string): Promise<Profile | null> {
         setProfileLoaded(false)
@@ -74,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(currentSession?.user ?? null)
 
             if (currentSession?.user) {
+                // Force a refresh to ensure server components (cookies) match client state
+                router.refresh()
                 const profileData = await fetchProfile(currentSession.user.id)
                 setProfile(profileData)
             } else {
@@ -102,10 +106,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => subscription.unsubscribe()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
-
-
-
-    // ... imports
 
     const signInWithEmail = async (email: string, password: string) => {
         setLoading(true)

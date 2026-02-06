@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -18,9 +18,12 @@ import { Target, User, LogOut, Menu, Briefcase } from "lucide-react";
 export function Navbar() {
     const { user, profile, signOut, loading } = useAuth();
     const pathname = usePathname();
+    const router = useRouter();
 
     const handleSignOut = async () => {
         await signOut();
+        router.push('/auth');
+        router.refresh();
     };
 
     // Helper to determine if link is active

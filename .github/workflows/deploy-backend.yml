@@ -12,6 +12,7 @@ on:
 env:
   BACKEND_APP_NAME: 'Perfect-Fit-Backend'
   PYTHON_VERSION: '3.11'
+  SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
 
 jobs:
   build-and-deploy:
