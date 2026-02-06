@@ -288,3 +288,11 @@ export const storageApi = {
         return response.url;
     }
 }
+
+export default {
+    get: (url: string) => fetchWithAuth(url),
+    post: (url: string, body: any) => fetchWithAuth(url, { method: 'POST', body: JSON.stringify(body) }),
+    put: (url: string, body: any) => fetchWithAuth(url, { method: 'PUT', body: JSON.stringify(body) }),
+    patch: (url: string, body: any) => fetchWithAuth(url, { method: 'PATCH', body: JSON.stringify(body) }),
+    delete: (url: string) => fetchWithAuth(url, { method: 'DELETE' })
+}

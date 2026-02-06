@@ -53,7 +53,7 @@ export function RegisterForm() {
                 password: values.password,
                 role: "CANDIDATE", // Hardcoded for candidate portal
             })
-            const { access_token } = response.data
+            const { access_token } = response
             localStorage.setItem("accessToken", access_token)
             router.push("/") // Redirect to dashboard/home
         } catch (err: any) {
