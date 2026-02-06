@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
                 .eq('id', data.session.user.id)
                 .single()
 
+            // Determine redirect base URL
+            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin
+
             // Determine redirect based on role
             let redirectPath = '/profile' // Default for candidates
 
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
                 }
             }
 
-            const response = NextResponse.redirect(`${origin}${redirectPath}`)
+            const response = NextResponse.redirect(`${siteUrl}${redirectPath}`)
 
             // Apply the cookies from the temporary store to the response
             cookieStore.forEach(({ value, options }, name) => {
