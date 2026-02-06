@@ -14,19 +14,11 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertCircle, CheckCircle, Clock, XCircle, ExternalLink, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-
-interface Application {
-    id: string;
-    job_id: string;
-    job_title: string;
-    status: 'submitted' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';
-    feedback?: string; // added this manually in migration
-    created_at: string;
-}
+import { type JobApplication } from "@/lib/api";
 
 export default function CandidateDashboard() {
     const { user, profile, session, loading: authLoading } = useAuth();
-    const [applications, setApplications] = useState<Application[]>([]);
+    const [applications, setApplications] = useState<JobApplication[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
