@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabase'
 import { apiLogger, logApiRequest, logApiResponse, logApiError } from './logger'
+import { toast } from "sonner"
 
 const API_BASE_URL = '/backend'
 
@@ -31,10 +32,21 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
         const durationMs = performance.now() - startTime
 
+
+        // ...
+
+
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}))
+            const errorMessage = errorBody.detail || `API Error: ${response.statusText}`
             logApiError(method, endpoint, `HTTP ${response.status}`, errorBody)
-            throw new Error(errorBody.detail || `API Error: ${response.statusText}`)
+
+            // Show toast for visible errors (excluding 404s which might be handled gracefully in UI)
+            if (response.status !== 404) {
+                toast.error(errorMessage)
+            }
+
+            throw new Error(errorMessage)
         }
 
         const data = await response.json()

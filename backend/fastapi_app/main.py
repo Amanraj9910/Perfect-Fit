@@ -101,6 +101,43 @@ def read_root():
     api_logger.info("Health check endpoint called")
     return {"message": "Perfect Fit Admin API is running"}
 
+@app.get("/debug-health")
+async def debug_health():
+    """Diagnostic endpoint to check env vars and db connection."""
+    import pkg_resources
+    import os
+    from dependencies import get_supabase
+    
+    results = {
+        "env_vars": {
+            "SUPABASE_URL": "SET" if os.environ.get("SUPABASE_URL") else "MISSING",
+            "SUPABASE_SERVICE_ROLE_KEY": "SET" if os.environ.get("SUPABASE_SERVICE_ROLE_KEY") else "MISSING",
+            "AZURE_STORAGE_CONNECTION_STRING": "SET" if os.environ.get("AZURE_STORAGE_CONNECTION_STRING") else "MISSING",
+        },
+        "packages": {},
+        "db_connection": "PENDING"
+    }
+    
+    # Check versions
+    for pkg in ["supabase", "postgrest", "gotrue", "fastapi"]:
+        try:
+            results["packages"][pkg] = pkg_resources.get_distribution(pkg).version
+        except Exception as e:
+            results["packages"][pkg] = f"Not found: {str(e)}"
+
+    # Test DB Connection
+    try:
+        supabase = get_supabase()
+        # Try a simple count query on 'profiles' - simplified to reduce errors
+        # Note: relying on the custom client structure from dependencies.py
+        response = await supabase.table("profiles").select("*", count="exact", head=True).limit(1).execute()
+        results["db_connection"] = f"SUCCESS: Found {response.count} profiles"
+    except Exception as e:
+        results["db_connection"] = f"FAILED: {str(e)}"
+        results["error_type"] = type(e).__name__
+
+    return results
+
 
 @app.on_event("startup")
 async def startup_event():

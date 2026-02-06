@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { createClient, getSupabaseClient } from '@/lib/supabase'
+import { toast } from "sonner"
 
 type UserRole = 'candidate' | 'employee' | 'hr' | 'recruiter' | 'admin'
 
@@ -102,6 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+
+
+    // ... imports
+
     const signInWithEmail = async (email: string, password: string) => {
         setLoading(true)
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -115,8 +120,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfileLoaded(false)
             // Trigger profile fetch immediately
             fetchProfile(data.session.user.id).then(p => setProfile(p))
+            toast.success("Signed in successfully")
         } else if (error) {
             setLoading(false)
+            toast.error(error.message)
         }
         return { data, error }
     }
@@ -133,7 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         })
         // Note: For signup, usually email verification is needed, so minimal state update
-        if (error) setLoading(false)
+        if (error) {
+            setLoading(false)
+            toast.error(error.message)
+        } else {
+            toast.success("Account created! Please check your email.")
+        }
         return { data, error }
     }
 
@@ -149,7 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         })
-        if (error) setLoading(false)
+        if (error) {
+            setLoading(false)
+            toast.error(error.message)
+        }
         return { data, error }
     }
 
@@ -165,7 +180,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         })
-        if (error) setLoading(false)
+        if (error) {
+            setLoading(false)
+            toast.error(error.message)
+        }
         return { data, error }
     }
 
