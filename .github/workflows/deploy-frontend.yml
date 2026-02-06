@@ -38,11 +38,13 @@ jobs:
         run: |
           # Copy static assets only if they exist
           if [ -d "frontend/public" ]; then
-            cp -r frontend/public frontend/.next/standalone/frontend/public
+            mkdir -p frontend/.next/standalone/frontend/public
+            cp -r frontend/public/* frontend/.next/standalone/frontend/public/
           fi
 
           if [ -d "frontend/.next/static" ]; then
-            cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static
+            mkdir -p frontend/.next/standalone/frontend/.next/static
+            cp -r frontend/.next/static/* frontend/.next/standalone/frontend/.next/static/
           fi
           
           cd frontend/.next/standalone
