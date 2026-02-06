@@ -2,6 +2,7 @@
 const nextConfig = {
     output: 'standalone',
     async rewrites() {
+        console.log("D E B U G: NEXT_PUBLIC_API_URL is:", process.env.NEXT_PUBLIC_API_URL);
         return [
             {
                 source: '/backend/:path*',
