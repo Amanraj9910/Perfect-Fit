@@ -56,17 +56,17 @@ async def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin fo
     api_logger.info("Fetching admin stats")
     
     # 1. Count Candidates
-    candidates_count = (await supabase.table("profiles").select("*", count="exact", head=True).eq("role", "candidate").execute()).count
+    candidates_count = (await supabase.table("profiles").select("*", count="exact").eq("role", "candidate").execute()).count
     
     # 2. Count Employees
-    employees_count = (await supabase.table("profiles").select("*", count="exact", head=True).eq("role", "employee").execute()).count
+    employees_count = (await supabase.table("profiles").select("*", count="exact").eq("role", "employee").execute()).count
     
     # 3. Total Assessments
-    assessments_count = (await supabase.table("assessments").select("*", count="exact", head=True).execute()).count
+    assessments_count = (await supabase.table("assessments").select("*", count="exact").execute()).count
     
     # 4. Assessments Today
     today = datetime.now().strftime("%Y-%m-%d")
-    assessments_today_count = (await supabase.table("assessments").select("*", count="exact", head=True).gte("created_at", today).execute()).count
+    assessments_today_count = (await supabase.table("assessments").select("*", count="exact").gte("created_at", today).execute()).count
     
     # 5. Average Score & Distribution
     scores_response = await supabase.table("assessment_scores").select("total_score").execute()
