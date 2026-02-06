@@ -108,26 +108,13 @@ export default function ProfilePage() {
         setUploading(true);
 
         try {
-            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
-            const { data: { session } } = await supabase.auth.getSession();
+            const { candidateApi } = await import("@/lib/api");
 
-            if (!session?.access_token) throw new Error("No auth token");
-
-            const formData = new FormData();
-            formData.append("file", file);
-
-            const endpoint = isResume ? "/api/candidates/upload/resume" : "/api/candidates/upload/picture";
-
-            const response = await fetch(`http://localhost:8000${endpoint}`, {
-                method: "POST",
-                headers: {
-                    "X-Supabase-Auth": session.access_token,
-                    // Content-Type header is set automatically with FormData
-                },
-                body: formData
-            });
-
-            if (!response.ok) throw new Error("Upload failed");
+            if (isResume) {
+                await candidateApi.uploadResume(file);
+            } else {
+                await candidateApi.uploadPicture(file);
+            }
 
             // Refetch profile to get new URLs
             refetch();

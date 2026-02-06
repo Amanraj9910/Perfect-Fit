@@ -147,10 +147,11 @@ async def get_my_profile(
     api_logger.info(f"Fetching profile for user: {user['id']}")
     
     try:
-        result = await supabase.table("candidate_profiles").select("*").eq("id", user["id"]).single().execute()
+        # Use limit(1) instead of single() to avoid exception when no row is found
+        result = await supabase.table("candidate_profiles").select("*").eq("id", user["id"]).limit(1).execute()
         
-        if result.data:
-            profile = result.data
+        if result.data and len(result.data) > 0:
+            profile = result.data[0]
             # Sign the URLs before returning
             if profile.get('resume_url'):
                 profile['resume_url'] = sign_blob_url(profile['resume_url'])

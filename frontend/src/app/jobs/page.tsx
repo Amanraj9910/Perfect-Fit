@@ -40,24 +40,16 @@ export default function JobsPage() {
             setLoading(true);
             try {
                 // Fetch public jobs
-                // Note: using direct URL for now, assume proxy or CORS handled
-                const res = await fetch("http://localhost:8000/api/jobs/public");
-                if (!res.ok) throw new Error("Failed to fetch jobs");
-                const data = await res.json();
+                const { jobsApi } = await import("@/lib/api");
+                const data = await jobsApi.listPublic();
                 setJobs(data);
 
                 // If logged in, check which ones I applied to?
                 if (user) {
-                    // Optimization: Fetch my applications to mark applied status
                     try {
-                        const token = (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
-                        const appsRes = await fetch("http://localhost:8000/api/applications/me", {
-                            headers: {
-                                "X-Supabase-Auth": (await token) || ""
-                            }
-                        });
-                        if (appsRes.ok) {
-                            const apps = await appsRes.json();
+                        const { applicationsApi } = await import("@/lib/api");
+                        const apps = await applicationsApi.listMine();
+                        if (apps) {
                             const appliedIds = new Set(apps.map((app: any) => app.job_id));
                             setAppliedJobs(appliedIds as Set<string>);
                         }
@@ -86,29 +78,12 @@ export default function JobsPage() {
             return;
         }
 
-        // Confirm apply? Or just apply with profile?
-        // User requirements: "click on apply so his application should be created"
-        // We'll proceed with direct apply using profile data.
-
         setApplyingJobId(jobId);
         try {
-            const token = await (await import("@/lib/supabase")).getSupabaseClient().auth.getSession().then(({ data }: { data: any }) => data.session?.access_token);
-
-            const res = await fetch(`http://localhost:8000/api/applications/${jobId}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Supabase-Auth": token || ""
-                },
-                body: JSON.stringify({
-                    cover_letter: "Applied via Website", // simplified for now
-                })
+            const { jobsApi } = await import("@/lib/api");
+            await jobsApi.apply(jobId, {
+                cover_letter: "Applied via Website",
             });
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || "Failed to apply");
-            }
 
             setAppliedJobs(prev => new Set(prev).add(jobId));
             // Show success toast? 
@@ -116,7 +91,7 @@ export default function JobsPage() {
 
         } catch (error: any) {
             console.error("Apply error:", error);
-            alert(`Application failed: ${error.message}`);
+            alert(`Application failed: ${error.message || "Unknown error"}`);
         } finally {
             setApplyingJobId(null);
         }

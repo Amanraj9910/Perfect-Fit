@@ -20,15 +20,27 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
     const token = session.access_token
 
-    const headers = {
-        'Content-Type': 'application/json',
+    const headers: Record<string, string> = {
         'x-supabase-auth': token,
-        ...options.headers,
+        ...options.headers as Record<string, string>,
+    }
+
+    if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json'
     }
 
     // Log request
     console.log(`[API] Fetching: ${url}`)
-    logApiRequest(method, endpoint, options.body ? JSON.parse(options.body as string) : undefined)
+
+    // Safety check for logging body
+    let logBody = undefined
+    if (typeof options.body === 'string') {
+        try {
+            logBody = JSON.parse(options.body)
+        } catch (e) { /* ignore */ }
+    }
+
+    logApiRequest(method, endpoint, logBody)
 
     try {
         const response = await fetch(url, {
@@ -321,7 +333,23 @@ export const candidateApi = {
     createProfile: (data: any) => fetchWithAuth('/api/candidates', {
         method: 'POST',
         body: JSON.stringify(data)
-    })
+    }),
+    uploadResume: (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return fetchWithAuth('/api/candidates/upload/resume', {
+            method: 'POST',
+            body: formData
+        });
+    },
+    uploadPicture: (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return fetchWithAuth('/api/candidates/upload/picture', {
+            method: 'POST',
+            body: formData
+        });
+    }
 }
 
 export const storageApi = {
