@@ -35,6 +35,8 @@ jobs:
       - name: Zip Backend Artifact
         run: |
           cd backend/fastapi_app
+          # Ensure startup.sh has unix line endings
+          sed -i 's/\r$//' startup.sh
           zip -r ../../backend.zip . -x "*.pyc" "__pycache__" ".venv"
 
       - name: Deploy to Azure Web App
