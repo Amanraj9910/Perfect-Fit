@@ -15,6 +15,7 @@ import AdminUserList from '@/components/admin/AdminUserList'
 import AdminAssessmentList from '@/components/admin/AdminAssessmentList'
 import AdminJobApprovals from '@/components/admin/AdminJobApprovals'
 import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
+import { AdminTechnicalResults } from '@/components/admin/AdminTechnicalResults'
 
 export default function AdminPage() {
     const router = useRouter()
@@ -104,6 +105,9 @@ export default function AdminPage() {
                         <TabsTrigger value="applications">
                             <FileText className="h-4 w-4 mr-2" /> Applications
                         </TabsTrigger>
+                        <TabsTrigger value="technical">
+                            <FileText className="h-4 w-4 mr-2" /> Tech. Results
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="dashboard" className="space-y-4">
@@ -124,6 +128,10 @@ export default function AdminPage() {
 
                     <TabsContent value="applications" className="space-y-4">
                         <AdminApplicationsList />
+                    </TabsContent>
+
+                    <TabsContent value="technical" className="space-y-4">
+                        <AdminTechnicalResults />
                     </TabsContent>
                 </Tabs>
             </main>

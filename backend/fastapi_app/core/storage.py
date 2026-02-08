@@ -83,5 +83,9 @@ def sign_blob_url(blob_url: str, expiry_hours: int = 1, as_attachment: bool = Fa
         return f"{base_url}?{sas_token}"
         
     except Exception as e:
+        # print to stdout to ensure we see it
+        print(f"ERROR in sign_blob_url: {e}")
+        import traceback
+        traceback.print_exc()
         log_error(e, context="sign_blob_url")
         return blob_url

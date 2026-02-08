@@ -8,7 +8,7 @@ Endpoints:
 - PUT /applications/{application_id}/status - Update application status (Admin/HR)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -65,6 +65,7 @@ class AssessmentResponse(BaseModel):
 async def submit_technical_assessment(
     app_id: str,
     submission: AssessmentSubmission,
+    background_tasks: BackgroundTasks,
     user: dict = Depends(get_user_with_role),
     supabase: CustomSupabaseClient = Depends(get_supabase)
 ):
@@ -94,55 +95,120 @@ async def submit_technical_assessment(
         if not questions_map:
              raise HTTPException(status_code=400, detail="No technical questions found for this job")
 
-        # 3. Process answers and run AI Scoring
-        scored_responses = []
-        
-        # We can run AI scoring in parallel using asyncio.gather
-        async def process_single_answer(qa: QuestionAnswer):
-            q_data = questions_map.get(qa.question_id)
-            if not q_data:
-                return None # Skip invalid question IDs
+        # 3. Insert initial responses (unscored)
+        unscored_responses = [
+            {
+                "application_id": app_id,
+                "question_id": qa.question_id,
+                "answer": qa.answer,
+                "ai_score": None,
+                "ai_reasoning": "Pending analysis..."
+            }
+            for qa in submission.answers
+            if qa.question_id in questions_map
+        ]
 
+        if unscored_responses:
+            await supabase.table("technical_assessment_responses").upsert(
+                unscored_responses, 
+                on_conflict="application_id,question_id"
+            ).execute()
+
+        # 4. Trigger Background Scoring
+        background_tasks.add_task(
+            run_ai_scoring,
+            app_id,
+            submission.answers,
+            questions_map,
+            supabase # Pass the client (might need fresh one if scoped?) -> Actually supabase client here is request scoped.
+            # Ideally we should instantiate a new client or use service role for background tasks.
+            # But specific dependency injection client might close.
+            # Let's use a fresh service role client for background tasks to be safe.
+        )
+        
+        return AssessmentResponse(
+            message="Assessment submitted. AI analysis is running in the background.",
+            scored_count=len(unscored_responses)
+        )
+
+from fastapi import BackgroundTasks
+
+async def run_ai_scoring(app_id: str, answers: List[QuestionAnswer], questions_map: dict, supabase_client=None):
+    """
+    Background task to score answers.
+    """
+    # Create a fresh service role client if not passed or to ensure persistence
+    # Re-import to avoid circular dependency if needed, or use the one from dependencies
+    from dependencies import CustomSupabaseClient
+    import os
+    
+    # We need a fresh client because the request scoped one might be closed?
+    # Actually fastapi dependency usually works if used within request, but background tasks run after response.
+    # Better safe: create new client.
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    supabase = CustomSupabaseClient(url, key)
+    
+    api_logger.info(f"Starting background AI scoring for app {app_id}")
+    
+    scored_updates = []
+    
+    async def process_single_answer(qa: QuestionAnswer):
+        q_data = questions_map.get(qa.question_id)
+        if not q_data: return None
+
+        try:
             # Run AI Evaluation
             evaluation = await evaluate_answer(
                 question=q_data["question"],
                 desired_answer=q_data["desired_answer"],
                 candidate_answer=qa.answer
             )
-
+            
             return {
                 "application_id": app_id,
                 "question_id": qa.question_id,
-                "answer": qa.answer,
                 "ai_score": evaluation.get("score"),
                 "ai_reasoning": evaluation.get("reasoning")
             }
+        except Exception as e:
+            log_error(e, context=f"bg_process_answer: {qa.question_id}")
+            return {
+                "application_id": app_id,
+                "question_id": qa.question_id,
+                 "ai_score": 0,
+                "ai_reasoning": f"Analysis failed: {str(e)}"
+            }
 
-        tasks = [process_single_answer(qa) for qa in submission.answers]
-        results = await asyncio.gather(*tasks)
+    tasks = [process_single_answer(qa) for qa in answers]
+    results = await asyncio.gather(*tasks)
+    
+    valid_updates = [r for r in results if r]
+    
+    if valid_updates:
+        # Upsert each or bulk? Bulk upsert works for multiple rows.
+        # We only need to update score/reasoning.
+        # But upsert requires all primary keys/constraints.
+        # We have application_id, question_id.
+        # We need to make sure we don't overwrite "answer" with null if we didn't include it.
+        # The 'valid_updates' above lacks 'answer'.
+        # So we should probably include 'answer' to be safe or use specific update logic.
+        # Bulk update in supabase usually requires all columns or it might set missing ones to null?
+        # No, 'upsert' updates provided columns. But better to include 'answer' just in case.
         
-        # Filter out Nones
-        valid_responses = [r for r in results if r]
-
-        # 4. Insert into database (Upsert in case of re-submission? Or simple insert)
-        # Using upsert on (application_id, question_id) conflict
-        if valid_responses:
-            result = await supabase.table("technical_assessment_responses").upsert(
-                valid_responses, 
-                on_conflict="application_id,question_id"
-            ).execute()
+        # Let's just include "answer" from the original input to be safe and simple.
+        # Map original answers
+        answers_map = {a.question_id: a.answer for a in answers}
+        
+        for r in valid_updates:
+            r["answer"] = answers_map.get(r["question_id"])
             
-            if not result.data and not result.count: # check count/data depending on response format
-                 # Upsert might not return data if nothing changed or header preference, but usually returns.
-                 # Just log success.
-                 pass
-
-        api_logger.info(f"Scored {len(valid_responses)} answers for app {app_id}")
-
-        return AssessmentResponse(
-            message="Assessment submitted and scored successfully",
-            scored_count=len(valid_responses)
-        )
+        await supabase.table("technical_assessment_responses").upsert(
+            valid_updates, 
+            on_conflict="application_id,question_id"
+        ).execute()
+        
+    api_logger.info(f"Background scoring completed for app {app_id}")
 
     except HTTPException:
         raise
@@ -226,6 +292,7 @@ async def get_my_applications(
         # Custom logic to check for technical assessment completion
         # We need to fetch technical_assessment_responses count for each app
         # Optimization: fetch all relevant application IDs and check existence in responses table
+        apps = []
         if result.data:
             app_ids = [item["id"] for item in result.data]
             
@@ -235,7 +302,6 @@ async def get_my_applications(
             if responses_query.data:
                 completed_app_ids = {r["application_id"] for r in responses_query.data}
 
-            apps = []
             for item in result.data:
                  # Flatten job_roles.title into job_title
                  job = item.get("job_roles")

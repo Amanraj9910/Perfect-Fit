@@ -177,10 +177,13 @@ async def get_my_profile(
         raise HTTPException(status_code=500, detail="Failed to initialize profile")
 
     except Exception as e:
+        print(f"ERROR in get_my_profile: {e}")
+        import traceback
+        traceback.print_exc()
         log_error(e, context="get_my_profile")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch profile"
+            detail=f"Failed to fetch profile: {str(e)}"
         )
 
 @router.put("/me")

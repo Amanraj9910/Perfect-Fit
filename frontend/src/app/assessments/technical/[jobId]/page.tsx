@@ -206,7 +206,7 @@ export default function TechnicalAssessmentPage() {
                         </Button>
                         <Button onClick={handleSubmit} disabled={submitting || !job.technical_questions?.length}>
                             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Submit Assessment
+                            {submitting ? "Analyzing Answers..." : "Submit Assessment"}
                         </Button>
                     </CardFooter>
                 </Card>

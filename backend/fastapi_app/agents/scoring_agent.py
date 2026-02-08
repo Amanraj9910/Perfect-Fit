@@ -4,7 +4,9 @@ Uses Azure OpenAI to evaluate technical assessment answers.
 """
 import os
 import json
-from openai import AzureOpenAI
+import os
+import json
+from openai import AsyncAzureOpenAI
 from core.logging import log_error, api_logger
 
 # Initialize Azure OpenAI Client
@@ -16,7 +18,7 @@ deployment_name = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
 client = None
 if api_key and azure_endpoint:
     try:
-        client = AzureOpenAI(
+        client = AsyncAzureOpenAI(
             api_key=api_key,
             api_version=api_version,
             azure_endpoint=azure_endpoint
@@ -53,7 +55,7 @@ async def evaluate_answer(question: str, desired_answer: str, candidate_answer: 
     """
 
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=deployment_name,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
