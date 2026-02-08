@@ -1,11 +1,9 @@
-"use client"
-
 import { useState } from 'react'
 import { CheckCircle, XCircle, ExternalLink, Loader2, FileText } from 'lucide-react'
+import { SecureAvatar } from '@/components/ui/secure-avatar'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
     Dialog,
     DialogContent,
@@ -76,10 +74,11 @@ export default function AdminApplicationsList() {
                         <Card key={app.id}>
                             <CardHeader className="flex flex-row items-start justify-between space-y-0">
                                 <div className="flex gap-4">
-                                    <Avatar className="h-10 w-10">
-                                        <AvatarImage src={app.candidate_avatar} />
-                                        <AvatarFallback>{app.candidate_name?.[0]}</AvatarFallback>
-                                    </Avatar>
+                                    <SecureAvatar
+                                        src={app.candidate_avatar}
+                                        fallback={app.candidate_name?.[0] || 'C'}
+                                        className="h-10 w-10"
+                                    />
                                     <div>
                                         <CardTitle className="text-base font-semibold">{app.candidate_name || "Candidate"}</CardTitle>
                                         <CardDescription className="text-sm">{app.job_title}</CardDescription>

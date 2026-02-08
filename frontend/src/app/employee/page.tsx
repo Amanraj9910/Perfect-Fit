@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { useEmployeeJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/lib/hooks/use-admin-queries'
-import { JobRole } from '@/lib/api'
+import { JobRole, TechnicalQuestion } from '@/lib/api'
 import { toast } from "sonner"
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,6 +37,11 @@ export default function EmployeePortal() {
     const [department, setDepartment] = useState('')
     const [description, setDescription] = useState('')
     const [requirements, setRequirements] = useState('')
+    // Technical Assessment Questions
+    const [questions, setQuestions] = useState<TechnicalQuestion[]>([])
+    const [newQuestion, setNewQuestion] = useState('')
+    const [newAnswer, setNewAnswer] = useState('')
+    const [showQuestionForm, setShowQuestionForm] = useState(false)
 
     // Use React Query for data fetching and caching
     const { data: jobRoles = [], isLoading: loading, error } = useEmployeeJobs()
@@ -61,8 +66,33 @@ export default function EmployeePortal() {
         setDepartment('')
         setDescription('')
         setRequirements('')
+        setQuestions([])
+        setNewQuestion('')
+        setNewAnswer('')
+        setShowQuestionForm(false)
         setEditingJob(null)
         setShowForm(false)
+    }
+
+    const addQuestion = () => {
+        if (newQuestion.trim().length < 5) {
+            toast.error("Question must be at least 5 characters")
+            return
+        }
+        if (newAnswer.trim().length < 2) {
+            toast.error("Desired answer must be at least 2 characters")
+            return
+        }
+        setQuestions([...questions, { question: newQuestion, desired_answer: newAnswer }])
+        setNewQuestion('')
+        setNewAnswer('')
+        setShowQuestionForm(false)
+    }
+
+    const removeQuestion = (index: number) => {
+        const newQuestions = [...questions]
+        newQuestions.splice(index, 1)
+        setQuestions(newQuestions)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -91,7 +121,7 @@ export default function EmployeePortal() {
                 // Update existing job
                 await updateJobMutation.mutateAsync({
                     id: editingJob.id,
-                    data: { title, department, description, requirements }
+                    data: { title, department, description, requirements, technical_questions: questions }
                 })
                 toast.success("Job updated successfully")
             } else {
@@ -100,7 +130,8 @@ export default function EmployeePortal() {
                     title,
                     department,
                     description,
-                    requirements
+                    requirements,
+                    technical_questions: questions
                 })
                 toast.success("Job created successfully")
             }
@@ -118,6 +149,7 @@ export default function EmployeePortal() {
         setDepartment(job.department)
         setDescription(job.description)
         setRequirements(job.requirements)
+        setQuestions(job.technical_questions || [])
         setShowForm(true)
     }
 
@@ -321,6 +353,74 @@ export default function EmployeePortal() {
                                             rows={3}
                                             required
                                         />
+                                    </div>
+
+                                    {/* Technical Assessment Section */}
+                                    <div className="space-y-4 border p-4 rounded-md bg-background">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="font-medium">Technical Assessment Questions</h4>
+                                                <p className="text-xs text-muted-foreground">Add questions for candidates to answer during application.</p>
+                                            </div>
+                                            {!showQuestionForm && (
+                                                <Button type="button" variant="secondary" size="sm" onClick={() => setShowQuestionForm(true)}>
+                                                    <PlusCircle className="h-3 w-3 mr-1" /> Add Question
+                                                </Button>
+                                            )}
+                                        </div>
+
+                                        {showQuestionForm && (
+                                            <div className="space-y-3 p-3 bg-muted/30 rounded border">
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="new-question">Question</Label>
+                                                    <Input
+                                                        id="new-question"
+                                                        value={newQuestion}
+                                                        onChange={(e) => setNewQuestion(e.target.value)}
+                                                        placeholder="e.g. Explain the difference between REST and GraphQL"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="new-answer">Desired Answer / Keywords</Label>
+                                                    <Textarea
+                                                        id="new-answer"
+                                                        value={newAnswer}
+                                                        onChange={(e) => setNewAnswer(e.target.value)}
+                                                        placeholder="Key points you expect in the answer..."
+                                                        rows={2}
+                                                    />
+                                                </div>
+                                                <div className="flex justify-end gap-2">
+                                                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowQuestionForm(false)}>Cancel</Button>
+                                                    <Button type="button" size="sm" onClick={addQuestion}>Add</Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {questions.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {questions.map((q, idx) => (
+                                                    <div key={idx} className="flex gap-3 items-start p-3 bg-muted/10 border rounded text-sm group">
+                                                        <span className="font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded text-xs mt-0.5">Q{idx + 1}</span>
+                                                        <div className="flex-1 space-y-1">
+                                                            <p className="font-medium">{q.question}</p>
+                                                            <p className="text-muted-foreground text-xs">Expected: {q.desired_answer}</p>
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            onClick={() => removeQuestion(idx)}
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-center py-2 text-muted-foreground italic">No questions added yet.</p>
+                                        )}
                                     </div>
                                     <div className="flex gap-2 justify-end">
                                         <Button type="button" variant="outline" onClick={resetForm}>

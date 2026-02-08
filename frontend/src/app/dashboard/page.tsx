@@ -13,10 +13,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertCircle, CheckCircle, Clock, XCircle, ExternalLink, Briefcase } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { type JobApplication } from "@/lib/api";
 
 export default function CandidateDashboard() {
+    const router = useRouter();
     const { user, profile, session, loading: authLoading } = useAuth();
     const [applications, setApplications] = useState<JobApplication[]>([]);
     const [loading, setLoading] = useState(true);
@@ -148,7 +150,7 @@ export default function CandidateDashboard() {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="pl-[52px]">
+                                        <div className="pl-[52px] flex flex-wrap gap-3">
                                             <Button
                                                 size="lg"
                                                 className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/10 hover:shadow-green-900/20 transition-all"
@@ -156,6 +158,25 @@ export default function CandidateDashboard() {
                                             >
                                                 Start Assessment <ExternalLink className="h-4 w-4" />
                                             </Button>
+
+                                            {app.technical_assessment_completed && (
+                                                <div className="w-full mt-2">
+                                                    <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200 py-1.5 px-3">
+                                                        <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                                                        Technical Assessment Completed
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                            {!app.technical_assessment_completed && (
+                                                <Button
+                                                    size="lg"
+                                                    variant="outline"
+                                                    className="gap-2 border-green-600/30 hover:bg-green-50 text-green-700"
+                                                    onClick={() => router.push(`/assessments/technical/${app.job_id}`)}
+                                                >
+                                                    Technical Assessment <ExternalLink className="h-4 w-4" />
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
                                 ) : app.status === 'rejected' && app.feedback ? (
@@ -193,6 +214,6 @@ export default function CandidateDashboard() {
                     ))
                 )}
             </div>
-        </div>
+        </div >
     );
 }

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { adminApi, applicationsApi, jobsApi, JobRole, JobApplication } from '@/lib/api'
+import { adminApi, applicationsApi, jobsApi, JobRole, JobApplication, JobRoleInput } from '@/lib/api'
 
 // ============================================
 // Query Keys - Centralized for cache management
@@ -192,7 +192,7 @@ export function useCreateJob() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (data: { title: string; department: string; description: string; requirements: string }) =>
+        mutationFn: (data: JobRoleInput) =>
             jobsApi.create(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: employeeQueryKeys.jobs() })

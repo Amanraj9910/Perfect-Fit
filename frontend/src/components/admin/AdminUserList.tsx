@@ -5,7 +5,7 @@ import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle } from 'lucide-reac
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { SecureAvatar } from '@/components/ui/secure-avatar'
 import { useDebounce } from '@/lib/use-debounce'
 
 interface AdminUserListProps {
@@ -79,12 +79,13 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
                     <div className="divide-y">
                         {users.map((user: any) => (
                             <div key={user.id} className="flex items-center justify-between p-4">
-                                <div className="flex items-center gap-4">
-                                    <Avatar>
-                                        <AvatarImage src={user.avatar_url} />
-                                        <AvatarFallback>{user.email[0].toUpperCase()}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
+                                <div className="flex items-center gap-3">
+                                    <SecureAvatar
+                                        src={user.avatar_url}
+                                        fallback={user.email[0].toUpperCase()}
+                                        className="h-8 w-8"
+                                    />
+                                    <div className="grid gap-0.5">
                                         <p className="font-medium">{user.full_name || 'No Name'}</p>
                                         <p className="text-sm text-muted-foreground">{user.email}</p>
                                     </div>

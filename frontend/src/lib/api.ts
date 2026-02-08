@@ -185,11 +185,18 @@ export const adminApi = {
 // Jobs API
 // ============================================
 
+export interface TechnicalQuestion {
+    id?: string
+    question: string
+    desired_answer: string
+}
+
 export interface JobRoleInput {
     title: string
     department: string
     description: string
     requirements: string
+    technical_questions?: TechnicalQuestion[]
 }
 
 export interface JobRoleUpdate {
@@ -197,6 +204,7 @@ export interface JobRoleUpdate {
     department?: string
     description?: string
     requirements?: string
+    technical_questions?: TechnicalQuestion[]
     current_version?: number  // For optimistic locking
 }
 
@@ -214,6 +222,7 @@ export interface JobRole {
     approved_at?: string
     rejection_reason?: string
     version: number  // For optimistic locking
+    technical_questions?: TechnicalQuestion[]
 }
 
 export interface ApplicationInput {
@@ -239,6 +248,7 @@ export interface JobApplication {
     candidate_name?: string
     candidate_email?: string
     candidate_avatar?: string
+    technical_assessment_completed?: boolean
 }
 
 export const jobsApi = {
@@ -321,11 +331,31 @@ export const applicationsApi = {
     listMine: (): Promise<JobApplication[]> => fetchWithAuth('/api/applications/me'),
 
     // Update application status
-    updateStatus: (id: string, status: string, feedback?: string) =>
-        fetchWithAuth(`/api/applications/${id}/status`, {
+    updateStatus: async (id: string, status: string, feedback?: string) => {
+        const res = await fetchWithAuth(`/api/applications/${id}/status`, {
             method: 'PUT',
             body: JSON.stringify({ status, feedback })
         })
+        return res
+    },
+}
+
+// ============================================
+// Assessment API
+// ============================================
+export interface QuestionAnswer {
+    question_id: string
+    answer: string
+}
+
+export const assessmentApi = {
+    submitTechnical: async (applicationId: string, answers: QuestionAnswer[]) => {
+        const res = await fetchWithAuth(`/api/applications/${applicationId}/technical-assessment/submit`, {
+            method: 'POST',
+            body: JSON.stringify({ answers })
+        })
+        return res
+    }
 }
 
 export const candidateApi = {

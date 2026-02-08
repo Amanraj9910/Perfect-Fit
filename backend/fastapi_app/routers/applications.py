@@ -12,9 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+import asyncio
 
 from dependencies import get_supabase, CustomSupabaseClient, get_user_with_role, verify_hr_or_admin
 from core.logging import api_logger, db_logger, log_error
+from agents.scoring_agent import evaluate_answer
 
 router = APIRouter()
 
@@ -42,10 +44,111 @@ class ApplicationResponse(BaseModel):
     created_at: str
     job_title: Optional[str] = None # Enriched field
     feedback: Optional[str] = None
+    technical_assessment_completed: bool = False
+
+class QuestionAnswer(BaseModel):
+    question_id: str
+    answer: str
+
+class AssessmentSubmission(BaseModel):
+    answers: List[QuestionAnswer]
+
+class AssessmentResponse(BaseModel):
+    message: str
+    scored_count: int
 
 # ============================================
 # Endpoints
 # ============================================
+
+@router.post("/{app_id}/technical-assessment/submit", status_code=status.HTTP_200_OK)
+async def submit_technical_assessment(
+    app_id: str,
+    submission: AssessmentSubmission,
+    user: dict = Depends(get_user_with_role),
+    supabase: CustomSupabaseClient = Depends(get_supabase)
+):
+    """
+    Submit technical assessment answers.
+    Triggers AI Agent to evaluate each answer and score it.
+    """
+    api_logger.info(f"User {user['id']} submitting assessment for application: {app_id}")
+
+    try:
+        # 1. Verify application belongs to user
+        app = await supabase.table("job_applications").select("id, job_id, applicant_id").eq("id", app_id).single().execute()
+        
+        if not app.data:
+            raise HTTPException(status_code=404, detail="Application not found")
+            
+        if app.data["applicant_id"] != user["id"]:
+            # Basic security check
+            raise HTTPException(status_code=403, detail="Not authorized to submit for this application")
+
+        job_id = app.data["job_id"]
+
+        # 2. Fetch all questions and desired answers for the job
+        questions_resp = await supabase.table("technical_assessments").select("id, question, desired_answer").eq("job_id", job_id).execute()
+        questions_map = {q["id"]: q for q in questions_resp.data} if questions_resp.data else {}
+
+        if not questions_map:
+             raise HTTPException(status_code=400, detail="No technical questions found for this job")
+
+        # 3. Process answers and run AI Scoring
+        scored_responses = []
+        
+        # We can run AI scoring in parallel using asyncio.gather
+        async def process_single_answer(qa: QuestionAnswer):
+            q_data = questions_map.get(qa.question_id)
+            if not q_data:
+                return None # Skip invalid question IDs
+
+            # Run AI Evaluation
+            evaluation = await evaluate_answer(
+                question=q_data["question"],
+                desired_answer=q_data["desired_answer"],
+                candidate_answer=qa.answer
+            )
+
+            return {
+                "application_id": app_id,
+                "question_id": qa.question_id,
+                "answer": qa.answer,
+                "ai_score": evaluation.get("score"),
+                "ai_reasoning": evaluation.get("reasoning")
+            }
+
+        tasks = [process_single_answer(qa) for qa in submission.answers]
+        results = await asyncio.gather(*tasks)
+        
+        # Filter out Nones
+        valid_responses = [r for r in results if r]
+
+        # 4. Insert into database (Upsert in case of re-submission? Or simple insert)
+        # Using upsert on (application_id, question_id) conflict
+        if valid_responses:
+            result = await supabase.table("technical_assessment_responses").upsert(
+                valid_responses, 
+                on_conflict="application_id,question_id"
+            ).execute()
+            
+            if not result.data and not result.count: # check count/data depending on response format
+                 # Upsert might not return data if nothing changed or header preference, but usually returns.
+                 # Just log success.
+                 pass
+
+        api_logger.info(f"Scored {len(valid_responses)} answers for app {app_id}")
+
+        return AssessmentResponse(
+            message="Assessment submitted and scored successfully",
+            scored_count=len(valid_responses)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error(e, context="submit_technical_assessment")
+        raise HTTPException(status_code=500, detail="Failed to submit assessment")
 
 @router.post("/{job_id}", status_code=status.HTTP_201_CREATED)
 async def apply_for_job(
@@ -120,15 +223,28 @@ async def get_my_applications(
         # Assuming foreign keys are set up, we can do: select(*, job_roles(title))
         result = await supabase.table("job_applications").select("*, job_roles(title)").eq("applicant_id", user["id"]).order("created_at", desc=True).execute()
         
-        apps = []
+        # Custom logic to check for technical assessment completion
+        # We need to fetch technical_assessment_responses count for each app
+        # Optimization: fetch all relevant application IDs and check existence in responses table
         if result.data:
-             for item in result.data:
+            app_ids = [item["id"] for item in result.data]
+            
+            # Get list of app IDs that have responses
+            responses_query = await supabase.table("technical_assessment_responses").select("application_id").in_("application_id", app_ids).execute()
+            completed_app_ids = set()
+            if responses_query.data:
+                completed_app_ids = {r["application_id"] for r in responses_query.data}
+
+            apps = []
+            for item in result.data:
                  # Flatten job_roles.title into job_title
                  job = item.get("job_roles")
                  if job and isinstance(job, dict):
                      item["job_title"] = job.get("title")
                  elif job and isinstance(job, list) and len(job) > 0: # handle potential list return
                       item["job_title"] = job[0].get("title")
+                 
+                 item["technical_assessment_completed"] = item["id"] in completed_app_ids
                  apps.append(item)
                  
         return apps
@@ -164,7 +280,7 @@ async def list_all_applications(
         profiles_map = {}
         if applicant_ids:
             try:
-                p_result = await supabase.table("candidate_profiles").select("id, full_name, email").in_("id", applicant_ids).execute()
+                p_result = await supabase.table("candidate_profiles").select("id, full_name, email, resume_url, linkedin_url").in_("id", applicant_ids).execute()
                 if p_result.data:
                     for p in p_result.data:
                         profiles_map[p["id"]] = p
@@ -184,6 +300,11 @@ async def list_all_applications(
             if profile:
                 item["candidate_name"] = profile.get("full_name")
                 item["candidate_email"] = profile.get("email")
+                # Fallback to profile data if application data is missing
+                if not item.get("resume_url"):
+                    item["resume_url"] = profile.get("resume_url")
+                if not item.get("linkedin_url"):
+                    item["linkedin_url"] = profile.get("linkedin_url")
             else:
                 item["candidate_name"] = "Unknown"
                 item["candidate_email"] = ""
@@ -228,3 +349,5 @@ async def update_application_status(
     except Exception as e:
         log_error(e, context="update_application_status")
         raise HTTPException(status_code=500, detail="Failed to update application")
+
+

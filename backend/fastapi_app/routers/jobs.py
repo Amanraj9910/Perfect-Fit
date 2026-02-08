@@ -33,11 +33,16 @@ router = APIRouter()
 # Pydantic Models
 # ============================================
 
+class TechnicalQuestion(BaseModel):
+    question: str = Field(..., min_length=5)
+    desired_answer: str = Field(..., min_length=2)
+
 class JobRoleCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     department: str = Field(..., min_length=2, max_length=100)
     description: str = Field(..., min_length=10)
     requirements: str = Field(..., min_length=10)
+    technical_questions: List[TechnicalQuestion] = []
 
 
 class JobRoleUpdate(BaseModel):
@@ -45,6 +50,7 @@ class JobRoleUpdate(BaseModel):
     department: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = Field(None, min_length=10)
     requirements: Optional[str] = Field(None, min_length=10)
+    technical_questions: Optional[List[TechnicalQuestion]] = None
     current_version: Optional[int] = Field(None, description="Current version for optimistic locking")
 
 
@@ -61,7 +67,8 @@ class JobRoleResponse(BaseModel):
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None
     rejection_reason: Optional[str] = None
-    version: int = 1  # For optimistic locking
+    version: int = 1
+    technical_questions: Optional[List[TechnicalQuestion]] = None  # For optimistic locking
 
 
 class RejectRequest(BaseModel):
@@ -199,7 +206,7 @@ async def create_job(
     
     try:
         # Insert job role
-        result = await supabase.table("job_roles").insert({
+        job_data = {
             "title": job.title,
             "department": job.department,
             "description": job.description,
@@ -208,7 +215,9 @@ async def create_job(
             "status": "pending",
             "is_open": True,
             "version": 1  # Initialize version for optimistic locking
-        }).execute()
+        }
+        
+        result = await supabase.table("job_roles").insert(job_data).execute()
         
         if not result.data:
             raise HTTPException(
@@ -217,6 +226,19 @@ async def create_job(
             )
         
         job_id = result.data[0]["id"]
+        
+        # Insert technical questions if any
+        if job.technical_questions:
+            questions_data = [
+                {
+                    "job_id": job_id,
+                    "question": q.question,
+                    "desired_answer": q.desired_answer
+                }
+                for q in job.technical_questions
+            ]
+            await supabase.table("technical_assessments").insert(questions_data).execute()
+            
         db_logger.info(f"Job role created: {job_id}")
         
         # Create initial approval request
@@ -359,6 +381,16 @@ async def get_job(
                     detail="Job not found"
                 )
         
+        # Fetch technical questions
+        q_result = await supabase.table("technical_assessments").select("*").eq("job_id", job_id).execute()
+        if q_result.data:
+            job["technical_questions"] = [
+                {"id": q["id"], "question": q["question"], "desired_answer": q["desired_answer"]} 
+                for q in q_result.data
+            ]
+        else:
+            job["technical_questions"] = []
+            
         return job
         
     except HTTPException:
@@ -404,8 +436,8 @@ async def update_job(
                 detail="Not authorized to update this job"
             )
         
-        # Build update dict (exclude current_version from update data)
-        update_dict = {k: v for k, v in updates.dict().items() if v is not None and k != "current_version"}
+        # Build update dict (exclude current_version and technical_questions from update data)
+        update_dict = {k: v for k, v in updates.dict().items() if v is not None and k not in ["current_version", "technical_questions"]}
         
         if not update_dict:
             return job
@@ -462,8 +494,28 @@ async def update_job(
                 "reason": "Re-approval required after edit"
             }).execute()
         
-        db_logger.info(f"Job updated: {job_id} (version: {update_dict['version']})")
-        return result.data[0] if result.data else job
+        updated_job = result.data[0] if result.data else job
+        
+        # Handle technical questions update
+        if updates.technical_questions is not None:
+            # Delete existing questions
+            await supabase.table("technical_assessments").delete().eq("job_id", job_id).execute()
+            
+            # Insert new questions
+            if updates.technical_questions:
+                questions_data = [
+                    {
+                        "job_id": job_id,
+                        "question": q.question,
+                        "desired_answer": q.desired_answer
+                    }
+                    for q in updates.technical_questions
+                ]
+                await supabase.table("technical_assessments").insert(questions_data).execute()
+            updated_job["technical_questions"] = updates.technical_questions
+            
+        db_logger.info(f"Job updated: {job_id} (version: {update_dict.get('version')})")
+        return updated_job
         
     except HTTPException:
         raise
