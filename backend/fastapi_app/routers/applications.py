@@ -130,6 +130,9 @@ async def submit_technical_assessment(
             message="Assessment submitted. AI analysis is running in the background.",
             scored_count=len(unscored_responses)
         )
+    except Exception as e:
+        api_logger.error(f"Error submitting assessment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 from fastapi import BackgroundTasks
 
@@ -210,11 +213,7 @@ async def run_ai_scoring(app_id: str, answers: List[QuestionAnswer], questions_m
         
     api_logger.info(f"Background scoring completed for app {app_id}")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_error(e, context="submit_technical_assessment")
-        raise HTTPException(status_code=500, detail="Failed to submit assessment")
+
 
 @router.post("/{job_id}", status_code=status.HTTP_201_CREATED)
 async def apply_for_job(
