@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/providers/auth-provider'
@@ -20,6 +20,9 @@ export default function AdminPage() {
     const router = useRouter()
     const queryClient = useQueryClient()
     const { user, profile, loading: authLoading, profileLoaded, signOut, isAdmin } = useAuth()
+
+    // Lifted state: assessment sub-tab selection (persists across admin tab switches)
+    const [assessmentActiveTab, setAssessmentActiveTab] = useState<'english' | 'technical'>('english')
 
     // Use React Query for stats - cached across tab switches
     const { data: stats, isLoading: statsLoading } = useAdminStats()
@@ -115,7 +118,10 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="assessments" className="space-y-4">
-                        <AdminAssessmentList />
+                        <AdminAssessmentList
+                            activeTab={assessmentActiveTab}
+                            onTabChange={setAssessmentActiveTab}
+                        />
                     </TabsContent>
 
                     <TabsContent value="jobs" className="space-y-4">
@@ -125,7 +131,6 @@ export default function AdminPage() {
                     <TabsContent value="applications" className="space-y-4">
                         <AdminApplicationsList />
                     </TabsContent>
-
 
                 </Tabs>
             </main>

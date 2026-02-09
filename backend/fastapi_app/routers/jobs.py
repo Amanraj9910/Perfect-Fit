@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import os
 
-from dependencies import get_supabase, CustomSupabaseClient
+from dependencies import get_supabase, CustomSupabaseClient, get_user_with_role, verify_hr_or_admin
 from core.logging import api_logger, db_logger, log_error, auth_logger
 
 router = APIRouter()
@@ -106,68 +106,10 @@ class ApprovalHistoryResponse(BaseModel):
 
 
 # ============================================
-# Auth Dependencies
+# Auth Dependencies - Imported from dependencies.py
 # ============================================
-
-async def get_current_user(x_supabase_auth: str = Header(None), supabase: CustomSupabaseClient = Depends(get_supabase)):
-    """Get current authenticated user without role check."""
-    if not x_supabase_auth:
-        auth_logger.warning("Jobs API: Auth attempt without token")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Auth Token"
-        )
-    
-    try:
-        user_response = await supabase.auth.get_user(x_supabase_auth)
-        if not user_response or not user_response.user:
-            auth_logger.warning("Jobs API: Invalid token")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Token"
-            )
-        
-        auth_logger.debug(f"Jobs API: User authenticated: {user_response.user.id}")
-        return user_response.user
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_error(e, context="get_current_user")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed"
-        )
-
-
-async def get_user_with_role(x_supabase_auth: str = Header(None), supabase: CustomSupabaseClient = Depends(get_supabase)):
-    """Get current user with their role from profiles table."""
-    user = await get_current_user(x_supabase_auth, supabase)
-    
-    try:
-        profile = await supabase.table("profiles").select("role, full_name, email").eq("id", str(user.id)).single().execute()
-        
-        if not profile.data:
-            auth_logger.warning(f"No profile found for user: {user.id}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User profile not found"
-            )
-        
-        return {
-            "id": str(user.id),
-            "role": profile.data.get("role", "candidate"),
-            "full_name": profile.data.get("full_name"),
-            "email": profile.data.get("email")
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_error(e, context="get_user_with_role")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch user profile"
-        )
-
+# get_current_user, get_user_with_role, verify_hr_or_admin imported from dependencies
+# verify_employee_or_admin is defined below as it's specific to jobs
 
 async def verify_employee_or_admin(user: dict = Depends(get_user_with_role)):
     """Verify user is employee or admin."""
@@ -176,17 +118,6 @@ async def verify_employee_or_admin(user: dict = Depends(get_user_with_role)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Employee or Admin privileges required"
-        )
-    return user
-
-
-async def verify_hr_or_admin(user: dict = Depends(get_user_with_role)):
-    """Verify user is HR or admin."""
-    if user["role"] not in ["hr", "admin"]:
-        auth_logger.warning(f"Jobs API: HR/Admin access denied for role: {user['role']}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="HR or Admin privileges required"
         )
     return user
 

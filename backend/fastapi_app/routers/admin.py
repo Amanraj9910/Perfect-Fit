@@ -52,7 +52,7 @@ class RoleUpdate(BaseModel):
 # --- Endpoints ---
 
 @router.get("/stats", response_model=UserStats)
-async def get_stats(supabase = Depends(get_supabase)): # Removed verify_admin for easier testing initially, add back later
+async def get_stats(admin = Depends(verify_admin), supabase = Depends(get_supabase)):
     api_logger.info("Fetching admin stats")
     
     # 1. Count Candidates

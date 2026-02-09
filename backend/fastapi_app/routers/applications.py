@@ -115,15 +115,13 @@ async def submit_technical_assessment(
             ).execute()
 
         # 4. Trigger Background Scoring
+        # Note: run_ai_scoring creates its own fresh Supabase client internally
+        # to avoid issues with request-scoped clients closing after response
         background_tasks.add_task(
             run_ai_scoring,
             app_id,
             submission.answers,
-            questions_map,
-            supabase # Pass the client (might need fresh one if scoped?) -> Actually supabase client here is request scoped.
-            # Ideally we should instantiate a new client or use service role for background tasks.
-            # But specific dependency injection client might close.
-            # Let's use a fresh service role client for background tasks to be safe.
+            questions_map
         )
         
         return AssessmentResponse(
@@ -136,7 +134,7 @@ async def submit_technical_assessment(
 
 from fastapi import BackgroundTasks
 
-async def run_ai_scoring(app_id: str, answers: List[QuestionAnswer], questions_map: dict, supabase_client=None):
+async def run_ai_scoring(app_id: str, answers: List[QuestionAnswer], questions_map: dict):
     """
     Background task to score answers.
     """

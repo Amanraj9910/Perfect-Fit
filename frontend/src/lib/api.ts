@@ -75,12 +75,18 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
                 toast.error(errorMessage)
             }
 
-            const error = new Error(errorMessage)
-            // @ts-ignore
-            error.status = response.status
-            // @ts-ignore
-            error.detail = errorBody.detail
-            throw error
+            // Use custom ApiError class for proper typing
+            class ApiError extends Error {
+                status: number
+                detail: unknown
+                constructor(message: string, status: number, detail: unknown) {
+                    super(message)
+                    this.name = 'ApiError'
+                    this.status = status
+                    this.detail = detail
+                }
+            }
+            throw new ApiError(errorMessage, response.status, errorBody.detail)
         }
 
         if (response.status === 204) {

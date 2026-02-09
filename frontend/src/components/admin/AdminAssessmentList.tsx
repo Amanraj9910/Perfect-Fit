@@ -14,10 +14,14 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-export default function AdminAssessmentList() {
+interface AdminAssessmentListProps {
+    activeTab: 'english' | 'technical'
+    onTabChange: (tab: 'english' | 'technical') => void
+}
+
+export default function AdminAssessmentList({ activeTab, onTabChange }: AdminAssessmentListProps) {
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null)
     const [assessmentToDelete, setAssessmentToDelete] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<'english' | 'technical'>('english')
 
     // Use React Query for data fetching and caching for English assessments
     const { data: assessments = [], isLoading, error } = useAdminAssessments()
@@ -43,7 +47,7 @@ export default function AdminAssessmentList() {
                     <Button
                         variant={activeTab === 'english' ? 'default' : 'ghost'}
                         size="sm"
-                        onClick={() => setActiveTab('english')}
+                        onClick={() => onTabChange('english')}
                         className="h-8"
                     >
                         <FileAudio className="h-4 w-4 mr-2" /> English
@@ -51,7 +55,7 @@ export default function AdminAssessmentList() {
                     <Button
                         variant={activeTab === 'technical' ? 'default' : 'ghost'}
                         size="sm"
-                        onClick={() => setActiveTab('technical')}
+                        onClick={() => onTabChange('technical')}
                         className="h-8"
                     >
                         <FileCode className="h-4 w-4 mr-2" /> Technical

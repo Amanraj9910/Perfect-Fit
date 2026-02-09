@@ -11,10 +11,10 @@ const defaultQueryOptions = {
         staleTime: 5 * 60 * 1000,
         // Cache is kept for 30 minutes after last access
         gcTime: 30 * 60 * 1000,
-        // Refetch on window focus (when user returns to tab)
+        // Refetch on window focus only when data is stale (more consistent UX)
         refetchOnWindowFocus: true,
-        // Don't refetch on mount if data is fresh
-        refetchOnMount: false,
+        // Refetch on mount if data is stale
+        refetchOnMount: true,
         // Retry failed requests up to 2 times
         retry: 2,
         // Exponential backoff for retries

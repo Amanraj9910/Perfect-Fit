@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { adminApi } from '@/lib/api'
 import { Users, UserCheck, Briefcase, Shield, Activity } from 'lucide-react'
 import {
     BarChart,
@@ -21,8 +19,6 @@ export default function AdminDashboard({ stats, loading }: AdminDashboardProps) 
     if (loading) {
         return <div className="p-8 text-center text-muted-foreground">Loading dashboard stats...</div>
     }
-
-    if (!stats) return null
 
     if (!stats) return null
 

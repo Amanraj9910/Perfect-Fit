@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import os
 import time
@@ -25,7 +26,20 @@ load_dotenv(dotenv_path="../../.env")
 # Initialize logging
 setup_logging()
 
-app = FastAPI(title="Perfect Fit Admin API")
+
+# Lifespan context manager (replaces deprecated on_event decorators)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events handler."""
+    # Startup
+    api_logger.info("🚀 Perfect Fit Admin API starting up...")
+    api_logger.info(f"📍 Environment: {os.environ.get('ENVIRONMENT', 'development')}")
+    yield
+    # Shutdown
+    api_logger.info("👋 Perfect Fit Admin API shutting down...")
+
+
+app = FastAPI(title="Perfect Fit Admin API", lifespan=lifespan)
 
 # CORS Configuration
 # Note: When allow_credentials=True, "*" is not allowed for allow_origins.
@@ -138,15 +152,3 @@ async def debug_health():
 
     return results
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Log application startup."""
-    api_logger.info("🚀 Perfect Fit Admin API starting up...")
-    api_logger.info(f"📍 Environment: {os.environ.get('ENVIRONMENT', 'development')}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Log application shutdown."""
-    api_logger.info("👋 Perfect Fit Admin API shutting down...")

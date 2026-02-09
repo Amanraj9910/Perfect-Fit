@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { createClient, getSupabaseClient } from '@/lib/supabase'
@@ -44,22 +44,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [profileLoaded, setProfileLoaded] = useState(false)
     const router = useRouter()
 
+    // Ref to track if we're in the middle of a login - prevents onAuthStateChange interference
+    const loginInProgressRef = useRef(false)
+
     async function fetchProfile(userId: string): Promise<Profile | null> {
-        setProfileLoaded(false)
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('id, email, full_name, avatar_url, role')
-            .eq('id', userId)
-            .single()
+        // NOTE: Caller must ensure profileLoaded is set appropriately
+        console.log('[Auth] fetchProfile started for user:', userId)
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, email, full_name, avatar_url, role')
+                .eq('id', userId)
+                .single()
 
-        setProfileLoaded(true)
-
-        if (error) {
-            console.error('Error fetching profile:', error)
+            if (error) {
+                console.error('[Auth] Error fetching profile:', error)
+                return null
+            }
+            console.log('[Auth] Profile fetched successfully:', data?.full_name)
+            return data as Profile
+        } catch (err) {
+            console.error('[Auth] Exception in fetchProfile:', err)
             return null
         }
-        console.log("Profile fetched successfully:", data);
-        return data as Profile
     }
 
     async function refreshProfile(): Promise<void> {
@@ -72,30 +79,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         // Get initial session and user securely
         const initAuth = async () => {
+            console.log('[Auth] initAuth starting...')
             try {
                 const { data: { session } } = await supabase.auth.getSession()
                 setSession(session)
 
                 // Use getUser() to get the user object securely to avoid warning
                 const { data: { user } } = await supabase.auth.getUser()
+                console.log('[Auth] initAuth got user:', user?.id)
                 setUser(user)
 
                 if (user) {
-                    // Force a refresh to ensure server components (cookies) match client state
-                    router.refresh()
                     try {
                         const profileData = await fetchProfile(user.id)
                         setProfile(profileData)
+                        console.log('[Auth] initAuth profile set:', profileData?.full_name)
                     } catch (err) {
-                        console.error("Profile fetch failed in initAuth:", err)
+                        console.error('[Auth] Profile fetch failed in initAuth:', err)
                     }
-                } else {
-                    setProfileLoaded(true) // No user, no profile to load
                 }
             } catch (e) {
-                console.error("Auth initialization failed:", e)
+                console.error('[Auth] Auth initialization failed:', e)
             } finally {
+                // CRITICAL: Always set both loading and profileLoaded in finally
+                // This ensures UI is never stuck in loading state
+                setProfileLoaded(true)
                 setLoading(false)
+                console.log('[Auth] initAuth complete - loading=false, profileLoaded=true')
             }
         }
 
@@ -104,6 +114,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event: string, newSession: Session | null) => {
+                // Skip if login is in progress - let signInWithEmail handle it
+                if (loginInProgressRef.current) {
+                    console.log('[Auth] Skipping onAuthStateChange during login')
+                    return
+                }
+
+                console.log('[Auth] onAuthStateChange:', _event)
+
                 try {
                     setSession(newSession)
 
@@ -115,20 +133,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                                 const profileData = await fetchProfile(user.id)
                                 setProfile(profileData)
                             } catch (err) {
-                                console.error("Profile fetch failed in auth change:", err)
+                                console.error('[Auth] Profile fetch failed in auth change:', err)
                             }
                         } else {
                             setProfile(null)
-                            setProfileLoaded(true)
                         }
                     } else {
                         setUser(null)
                         setProfile(null)
-                        setProfileLoaded(true)
                     }
                 } catch (e) {
-                    console.error("Auth change handler failed:", e)
+                    console.error('[Auth] Auth change handler failed:', e)
                 } finally {
+                    setProfileLoaded(true)
                     setLoading(false)
                 }
             }
@@ -140,6 +157,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signInWithEmail = async (email: string, password: string) => {
         setLoading(true)
+        loginInProgressRef.current = true // Prevent onAuthStateChange from interfering
+
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
@@ -148,17 +167,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (data.session) {
                 setSession(data.session)
                 setUser(data.session.user)
-                // Reset profile loaded state so consumers know to wait
-                setProfileLoaded(false)
 
-                // Trigger profile fetch immediately and wait for it
-                // We use a try-catch here specifically for profile fetch to not break the login if profile fails
+                // Fetch profile and set it
                 try {
                     const profile = await fetchProfile(data.session.user.id);
                     setProfile(profile);
                 } catch (profileError) {
                     console.error("Profile fetch failed during login:", profileError);
-                    // proceeding without profile, keeping user
                 }
 
                 toast.success("Signed in successfully")
@@ -171,7 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             toast.error("An unexpected error occurred")
             return { data: { user: null, session: null }, error: err }
         } finally {
+            // CRITICAL: Always set these in finally block to prevent stuck states
+            setProfileLoaded(true)
             setLoading(false)
+            loginInProgressRef.current = false // Re-enable onAuthStateChange
         }
     }
 
@@ -234,19 +252,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { data, error }
     }
 
-    async function signOut() {
+    // Use useCallback to prevent stale closure issues
+    const signOut = useCallback(async () => {
+        console.log('[Auth] signOut called')
+
+        // ALWAYS clear local state first, regardless of API success
+        // This ensures UI updates even if session was already expired
+        setUser(null)
+        setProfile(null)
+        setSession(null)
+        setProfileLoaded(true)
+
         try {
-            await supabase.auth.signOut()
+            const { error } = await supabase.auth.signOut()
+            if (error) {
+                console.warn('[Auth] signOut API warning (may be already signed out):', error.message)
+            }
         } catch (error) {
-            console.error("Error signing out:", error)
-        } finally {
-            setUser(null)
-            setProfile(null)
-            setSession(null)
-            setProfileLoaded(true) // Reset to loaded so we don't block UI waiting for nothing
-            // Removed router.refresh() to avoid double reload effect before redirect
+            console.error('[Auth] Error during signOut API call:', error)
+            // State is already cleared, so user can proceed
         }
-    }
+    }, [])
 
     const isAdmin = !!(profile?.role && ['admin', 'hr', 'recruiter'].includes(profile.role))
 

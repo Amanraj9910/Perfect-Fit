@@ -172,15 +172,31 @@ export function useTechnicalResults(applicationId?: string) {
             if (error) throw error
             if (!data) return []
 
-            // Enrich and Group
-            const enriched: TechnicalResult[] = await Promise.all(data.map(async (item: any) => {
-                let candidateName = "Unknown"
-                if (item.job_applications?.applicant_id) {
-                    // We try to fetch the profile name. Note: this is N+1 but Supabase is fast.
-                    // Optimally, join profiles if possible or assume cache.
-                    const { data: p } = await supabase.from('profiles').select('full_name').eq('id', item.job_applications.applicant_id).single()
-                    if (p) candidateName = p.full_name
+            // Batch fetch all unique applicant IDs to avoid N+1 queries
+            const uniqueApplicantIds = Array.from(new Set(
+                data
+                    .map((item: any) => item.job_applications?.applicant_id)
+                    .filter((id: unknown): id is string => Boolean(id))
+            ))
+
+            // Single query for all profiles
+            let profilesMap: Record<string, string> = {}
+            if (uniqueApplicantIds.length > 0) {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', uniqueApplicantIds)
+                if (profiles) {
+                    profilesMap = Object.fromEntries(
+                        profiles.map((p: { id: string; full_name: string | null }) => [p.id, p.full_name || 'Unknown'])
+                    )
                 }
+            }
+
+            // Enrich data using the pre-fetched profiles map
+            const enriched: TechnicalResult[] = data.map((item: any) => {
+                const applicantId = item.job_applications?.applicant_id
+                const candidateName = applicantId ? (profilesMap[applicantId] || 'Unknown') : 'Unknown'
 
                 return {
                     id: item.id,
@@ -194,7 +210,7 @@ export function useTechnicalResults(applicationId?: string) {
                     job_title: item.job_applications?.job_roles?.title,
                     created_at: item.created_at
                 }
-            }))
+            })
 
             // Group by application_id
             const groups: Record<string, GroupedAssessment> = {}
