@@ -71,6 +71,18 @@ export function useUpdateUserRole() {
     })
 }
 
+export function useDeleteUser() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (userId: string) => adminApi.deleteUser(userId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [...adminQueryKeys.all, 'users'] })
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.stats() })
+        },
+    })
+}
+
 // ============================================
 // Admin Assessments Hooks
 // ============================================
@@ -88,6 +100,18 @@ export function useAdminAssessmentDetail(id: string) {
         queryFn: () => adminApi.getAssessmentDetail(id),
         enabled: !!id, // Only fetch if id is provided
         staleTime: 1000 * 60 * 5, // 5 minutes
+    })
+}
+
+export function useDeleteAssessment() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (id: string) => adminApi.deleteAssessment(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.assessments() })
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.stats() })
+        },
     })
 }
 
@@ -112,6 +136,18 @@ export function useUpdateApplicationStatus() {
             // Invalidate applications to refetch updated data
             queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications() })
             // Also invalidate stats since application counts may change
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.stats() })
+        },
+    })
+}
+
+export function useDeleteApplication() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (id: string) => applicationsApi.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications() })
             queryClient.invalidateQueries({ queryKey: adminQueryKeys.stats() })
         },
     })

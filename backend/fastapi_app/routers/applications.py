@@ -416,3 +416,23 @@ async def update_application_status(
         raise HTTPException(status_code=500, detail="Failed to update application")
 
 
+@router.delete("/{app_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_application(
+    app_id: str,
+    user: dict = Depends(verify_hr_or_admin),
+    supabase: CustomSupabaseClient = Depends(get_supabase)
+):
+    """Delete an application."""
+    api_logger.info(f"Deleting application {app_id} by {user['id']}")
+    
+    try:
+        result = await supabase.table("job_applications").delete().eq("id", app_id).execute()
+        
+        # also delete technical assessment responses for this app if any
+        await supabase.table("technical_assessment_responses").delete().eq("application_id", app_id).execute()
+        
+    except Exception as e:
+        log_error(e, context="delete_application")
+        raise HTTPException(status_code=500, detail="Failed to delete application")
+
+

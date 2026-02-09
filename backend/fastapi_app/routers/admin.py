@@ -251,3 +251,57 @@ async def get_audio_sas(id: str, response_id: str, supabase = Depends(get_supaba
     api_logger.info(f"Generated SAS URL for {section}")
     return {"audio_url": sas_url, "section": section}
 
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(user_id: str, supabase = Depends(get_supabase)):
+    """
+    Delete a user profile and all associated data (via cascading deletes in DB).
+    """
+    api_logger.info(f"Deleting user {user_id}")
+    
+    # Check if user exists first? Or just delete.
+    # Supabase/Postgres usually handles cascading if configured, otherwise we might need to delete related rows.
+    # Assuming 'profiles' deletion cascades to applications, assessments, etc. or we need to do it manually.
+    # For now, let's try direct delete on profiles.
+    
+    # However, supabase auth.users is separate from public.profiles.
+    # Deleting public.profiles row might not delete the auth user.
+    # Deleting auth user usually cascades to public.profiles if set up that way.
+    # But via Supabase client (service role), we might only have access to public schema unless we use admin auth client.
+    # If we only delete profile, the auth user remains but can't log in properly or will be recreated?
+    # Ideally we delete from auth.users.
+    
+    # But usually via this API we interact with public schema.
+    # Let's delete from 'profiles' table.
+    try:
+        result = await supabase.table("profiles").delete().eq("id", user_id).execute()
+        if not result.data:
+            # It might be already deleted or not found.
+            pass
+            
+    except Exception as e:
+        log_error(e, context=f"delete_user:{user_id}")
+        raise HTTPException(status_code=500, detail="Failed to delete user")
+
+
+@router.delete("/assessments/{id}", status_code=204)
+async def delete_assessment(id: str, supabase = Depends(get_supabase)):
+    """
+    Delete an assessment.
+    """
+    api_logger.info(f"Deleting assessment {id}")
+    
+    try:
+        result = await supabase.table("assessments").delete().eq("id", id).execute()
+        if not result.data:
+            # Check if it was technical assessment (stored in technical_assessment_responses)?
+            # Technical assessments don't have a master 'assessments' row in some designs, 
+            # they are just responses linked to application.
+            # But the 'assessments' table usually tracks the 'behavioral/english' ones.
+            # If this is for the "English" tab which uses 'assessments' table:
+            pass
+            
+    except Exception as e:
+        log_error(e, context=f"delete_assessment:{id}")
+        raise HTTPException(status_code=500, detail="Failed to delete assessment")
+

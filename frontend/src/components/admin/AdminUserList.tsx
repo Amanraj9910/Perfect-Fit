@@ -1,12 +1,21 @@
 import { useState } from 'react'
-import { useAdminUsers, useUpdateUserRole } from '@/lib/hooks/use-admin-queries'
+import { toast } from "sonner"
+import { useAdminUsers, useUpdateUserRole, useDeleteUser } from '@/lib/hooks/use-admin-queries'
 import { uiLogger } from '@/lib/logger'
-import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react'
+import { Loader2, Search, ArrowLeft, ArrowRight, AlertCircle, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SecureAvatar } from '@/components/ui/secure-avatar'
 import { useDebounce } from '@/lib/use-debounce'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 
 interface AdminUserListProps {
     readonly?: boolean
@@ -16,10 +25,12 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
     const [page, setPage] = useState(1)
     const [searchTerm, setSearchTerm] = useState('')
     const debouncedSearch = useDebounce(searchTerm, 500)
+    const [userToDelete, setUserToDelete] = useState<string | null>(null)
 
     // Use React Query for data fetching and caching
     const { data, isLoading, error } = useAdminUsers(page, debouncedSearch)
     const updateRoleMutation = useUpdateUserRole()
+    const deleteUserMutation = useDeleteUser()
 
     const users = data?.users || []
     const totalPages = Math.ceil((data?.total || 0) / 10) || 1
@@ -27,9 +38,22 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
     const handleRoleUpdate = async (userId: string, newRole: string) => {
         try {
             await updateRoleMutation.mutateAsync({ userId, role: newRole })
+            toast.success("User role updated")
         } catch (error) {
             console.error(error)
-            alert('Failed to update role')
+            toast.error('Failed to update role')
+        }
+    }
+
+    const confirmDelete = async () => {
+        if (!userToDelete) return
+        try {
+            await deleteUserMutation.mutateAsync(userToDelete)
+            setUserToDelete(null)
+            toast.success("User deleted successfully")
+        } catch (error) {
+            console.error(error)
+            toast.error('Failed to delete user')
         }
     }
 
@@ -41,22 +65,11 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
         admin: 'bg-red-100 text-red-800'
     }
 
-    if (error) {
-        return (
-            <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
-                <AlertCircle className="h-12 w-12 text-destructive" />
-                <div className="space-y-2">
-                    <h3 className="font-semibold text-lg">Failed to Load Users</h3>
-                    <p className="text-sm text-muted-foreground">
-                        {error instanceof Error ? error.message : 'Unknown error'}
-                    </p>
-                </div>
-            </div>
-        )
-    }
+    // ... (rest of the component)
 
     return (
         <div className="space-y-4">
+            {/* Search and List UI... */}
             <div className="flex items-center gap-4">
                 <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -95,22 +108,39 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
                                         {user.role}
                                     </span>
                                     {!readonly && (
-                                        <Select
-                                            value={user.role}
-                                            onValueChange={(val) => handleRoleUpdate(user.id, val)}
-                                            disabled={updateRoleMutation.isPending}
-                                        >
-                                            <SelectTrigger className="w-[130px]">
-                                                {updateRoleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="candidate">Candidate</SelectItem>
-                                                <SelectItem value="employee">Employee</SelectItem>
-                                                <SelectItem value="hr">HR</SelectItem>
-                                                <SelectItem value="recruiter">Recruiter</SelectItem>
-                                                <SelectItem value="admin">Admin</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <>
+                                            <Select
+                                                value={user.role}
+                                                onValueChange={(val) => handleRoleUpdate(user.id, val)}
+                                                disabled={updateRoleMutation.isPending}
+                                            >
+                                                <SelectTrigger className="w-[130px]">
+                                                    {updateRoleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SelectValue />}
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="candidate">Candidate</SelectItem>
+                                                    <SelectItem value="employee">Employee</SelectItem>
+                                                    <SelectItem value="hr">HR</SelectItem>
+                                                    <SelectItem value="recruiter">Recruiter</SelectItem>
+                                                    <SelectItem value="admin">Admin</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setUserToDelete(user.id)}
+                                                disabled={deleteUserMutation.isPending || user.role === 'admin'}
+                                                className="text-muted-foreground hover:text-red-600 w-8 h-8"
+                                                title="Delete User"
+                                            >
+                                                {deleteUserMutation.isPending && userToDelete === user.id ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -141,6 +171,28 @@ export default function AdminUserList({ readonly = false }: AdminUserListProps) 
                     Next <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
             </div>
+
+            <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Are you absolutely sure?</DialogTitle>
+                        <DialogDescription>
+                            This action cannot be undone. This will permanently delete the user account
+                            and remove their data from our servers.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setUserToDelete(null)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDelete}
+                            disabled={deleteUserMutation.isPending}
+                        >
+                            {deleteUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Delete Account"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

@@ -83,6 +83,11 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
             throw error
         }
 
+        if (response.status === 204) {
+            logApiResponse(method, endpoint, response.status, durationMs)
+            return null
+        }
+
         const data = await response.json()
         logApiResponse(method, endpoint, response.status, durationMs)
 
@@ -178,7 +183,17 @@ export const adminApi = {
     getAssessmentDetail: (id: string) => fetchWithAuth(`/admin/assessments/${id}`),
 
     getAudioUrl: (assessmentId: string, responseId: string) =>
-        fetchWithAuth(`/admin/assessments/${assessmentId}/audio/${responseId}`)
+        fetchWithAuth(`/admin/assessments/${assessmentId}/audio/${responseId}`),
+
+    deleteUser: (userId: string) =>
+        fetchWithAuth(`/admin/users/${userId}`, {
+            method: 'DELETE'
+        }),
+
+    deleteAssessment: (id: string) =>
+        fetchWithAuth(`/admin/assessments/${id}`, {
+            method: 'DELETE'
+        })
 }
 
 // ============================================
@@ -338,6 +353,12 @@ export const applicationsApi = {
         })
         return res
     },
+
+    // Delete application
+    delete: (id: string) =>
+        fetchWithAuth(`/api/applications/${id}`, {
+            method: 'DELETE'
+        })
 }
 
 // ============================================

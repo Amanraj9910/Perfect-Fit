@@ -1,24 +1,39 @@
-'use client'
-
 import { useState } from 'react'
-import { useAdminAssessments } from '../../lib/hooks/use-admin-queries'
-import { Loader2, Eye, FileAudio, CheckCircle, Clock, AlertCircle, FileCode } from 'lucide-react'
+import { toast } from "sonner"
+import { useAdminAssessments, useDeleteAssessment } from '../../lib/hooks/use-admin-queries'
+import { Loader2, Eye, FileAudio, CheckCircle, Clock, AlertCircle, FileCode, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AssessmentDetail } from './AdminAssessmentDetail'
 import AdminTechnicalResults from './AdminTechnicalResults'
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
 
 export default function AdminAssessmentList() {
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null)
+    const [assessmentToDelete, setAssessmentToDelete] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'english' | 'technical'>('english')
 
     // Use React Query for data fetching and caching for English assessments
     const { data: assessments = [], isLoading, error } = useAdminAssessments()
+    const deleteMutation = useDeleteAssessment()
+
+    const handleDelete = async () => {
+        if (!assessmentToDelete) return
+        try {
+            await deleteMutation.mutateAsync(assessmentToDelete)
+            setAssessmentToDelete(null)
+            toast.success("Assessment deleted successfully")
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to delete assessment")
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -81,13 +96,29 @@ export default function AdminAssessmentList() {
                                         )}
                                     </div>
 
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setSelectedAssessmentId(assessment.id)}
-                                    >
-                                        <Eye className="h-4 w-4 mr-2" />View
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setSelectedAssessmentId(assessment.id)}
+                                        >
+                                            <Eye className="h-4 w-4 mr-2" />View
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setAssessmentToDelete(assessment.id)}
+                                            disabled={deleteMutation.isPending}
+                                            className="text-muted-foreground hover:text-red-600 w-8 h-8"
+                                            title="Delete Assessment"
+                                        >
+                                            {deleteMutation.isPending && assessmentToDelete === assessment.id ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="h-4 w-4" />
+                                            )}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -104,6 +135,27 @@ export default function AdminAssessmentList() {
                             {selectedAssessmentId && (
                                 <AssessmentDetail id={selectedAssessmentId} />
                             )}
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={!!assessmentToDelete} onOpenChange={(open) => !open && setAssessmentToDelete(null)}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete Assessment</DialogTitle>
+                                <DialogDescription>
+                                    Are you sure you want to delete this assessment? This action cannot be undone.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setAssessmentToDelete(null)}>Cancel</Button>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleDelete}
+                                    disabled={deleteMutation.isPending}
+                                >
+                                    {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Delete"}
+                                </Button>
+                            </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>

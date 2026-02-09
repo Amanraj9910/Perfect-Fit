@@ -8,18 +8,28 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "../ui/table"
+} from "@/components/ui/table"
 import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-} from "../ui/card"
-import { Badge } from "../ui/badge"
-import { Button } from "../ui/button"
-import { Loader2, ChevronDown, ChevronUp, AlertCircle, FileCode, CheckCircle } from "lucide-react"
-import { getSupabaseClient } from '../../lib/supabase'
+} from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Loader2, ChevronDown, ChevronUp, AlertCircle, FileCode, CheckCircle, Trash2 } from "lucide-react"
+import { getSupabaseClient } from '@/lib/supabase'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { useDeleteApplication } from '@/lib/hooks/use-admin-queries'
+import { toast } from "sonner"
 
 interface TechnicalResult {
     id: string
@@ -53,6 +63,9 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
     const [grouped, setGrouped] = useState<GroupedAssessment[]>([])
     const [loading, setLoading] = useState(true)
     const [expandedAppId, setExpandedAppId] = useState<string | null>(null)
+    const [appToDelete, setAppToDelete] = useState<string | null>(null)
+
+    const deleteApplicationMutation = useDeleteApplication()
 
     useEffect(() => {
         fetchResults()
@@ -151,6 +164,19 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
         setExpandedAppId(expandedAppId === appId ? null : appId)
     }
 
+    const confirmDelete = async () => {
+        if (!appToDelete) return
+        try {
+            await deleteApplicationMutation.mutateAsync(appToDelete)
+            setAppToDelete(null)
+            toast.success("Application deleted successfully")
+            fetchResults() // Refresh the list
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to delete application")
+        }
+    }
+
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
     }
@@ -171,10 +197,12 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
                 {grouped.map((group) => (
                     <div key={group.application_id} className="flex flex-col">
                         <div
-                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => toggleExpand(group.application_id)}
+                            className="flex items-center justify-between p-4"
                         >
-                            <div className="flex items-center gap-4">
+                            <div
+                                className="flex items-center gap-4 cursor-pointer flex-1"
+                                onClick={() => toggleExpand(group.application_id)}
+                            >
                                 <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
                                     <FileCode className="h-5 w-5 text-blue-600" />
                                 </div>
@@ -208,9 +236,23 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
                                     )}
                                 </div>
 
-                                <Button variant="ghost" size="sm">
-                                    {expandedAppId === group.application_id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" onClick={() => toggleExpand(group.application_id)}>
+                                        {expandedAppId === group.application_id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-muted-foreground hover:text-red-600"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setAppToDelete(group.application_id)
+                                        }}
+                                        title="Delete Assessment (and Application)"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 
@@ -268,6 +310,27 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
                     </div>
                 ))}
             </div>
+
+            <Dialog open={!!appToDelete} onOpenChange={(open) => !open && setAppToDelete(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Technical Assessment?</DialogTitle>
+                        <DialogDescription>
+                            Warning: This will delete the entire Job Application and all associated data for this candidate. This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setAppToDelete(null)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDelete}
+                            disabled={deleteApplicationMutation.isPending}
+                        >
+                            {deleteApplicationMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Delete Application"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

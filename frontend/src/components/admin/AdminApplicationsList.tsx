@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle, XCircle, ExternalLink, Loader2, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, ExternalLink, Loader2, FileText, Trash2 } from 'lucide-react'
 import { SecureAvatar } from '@/components/ui/secure-avatar'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,18 +14,20 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/auth-provider'
-import { useAdminApplications, useUpdateApplicationStatus } from '@/lib/hooks/use-admin-queries'
+import { useAdminApplications, useUpdateApplicationStatus, useDeleteApplication } from '@/lib/hooks/use-admin-queries'
 import { JobApplication } from '@/lib/api'
 
 export default function AdminApplicationsList() {
     const { user } = useAuth();
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
     const [feedback, setFeedback] = useState("")
 
     // Use React Query for data fetching and caching
     const { data: applications = [], isLoading } = useAdminApplications()
     const updateStatusMutation = useUpdateApplicationStatus()
+    const deleteApplicationMutation = useDeleteApplication()
 
     const updateStatus = async (appId: string, status: JobApplication['status'], feedbackText?: string) => {
         try {
@@ -44,9 +46,26 @@ export default function AdminApplicationsList() {
         setRejectDialogOpen(true)
     }
 
+    const handleDeleteClick = (appId: string) => {
+        setSelectedAppId(appId)
+        setDeleteDialogOpen(true)
+    }
+
     const confirmReject = () => {
         if (selectedAppId) {
             updateStatus(selectedAppId, 'rejected', feedback)
+        }
+    }
+
+    const confirmDelete = async () => {
+        if (!selectedAppId) return
+        try {
+            await deleteApplicationMutation.mutateAsync(selectedAppId)
+            setDeleteDialogOpen(false)
+            setSelectedAppId(null)
+        } catch (error) {
+            console.error(error)
+            alert("Failed to delete application")
         }
     }
 
@@ -93,9 +112,20 @@ export default function AdminApplicationsList() {
                                         </div>
                                     </div>
                                 </div>
-                                <Badge variant="outline" className={getStatusColor(app.status)}>
-                                    {app.status}
-                                </Badge>
+                                <div className="flex flex-col items-end gap-2">
+                                    <Badge variant="outline" className={getStatusColor(app.status)}>
+                                        {app.status}
+                                    </Badge>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-muted-foreground hover:text-red-600"
+                                        onClick={() => handleDeleteClick(app.id)}
+                                        title="Delete Application"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </CardHeader>
                             <CardContent className="py-2">
                                 {app.cover_letter && (
@@ -187,6 +217,23 @@ export default function AdminApplicationsList() {
                         <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
                         <Button variant="destructive" onClick={confirmReject} disabled={!feedback.trim() || updateStatusMutation.isPending}>
                             {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Discard Application"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Application</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete this application? This will remove all associated data including technical assessments.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={confirmDelete} disabled={deleteApplicationMutation.isPending}>
+                            {deleteApplicationMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Delete"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
