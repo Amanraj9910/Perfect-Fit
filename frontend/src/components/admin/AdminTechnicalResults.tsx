@@ -19,7 +19,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2, ChevronDown, ChevronUp, AlertCircle, FileCode, CheckCircle, Trash2 } from "lucide-react"
-import { getSupabaseClient } from '@/lib/supabase'
 import {
     Dialog,
     DialogContent,
@@ -28,137 +27,25 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { useDeleteApplication } from '@/lib/hooks/use-admin-queries'
+import { useDeleteApplication, useTechnicalResults, GroupedAssessment, TechnicalResult } from '@/lib/hooks/use-admin-queries'
 import { toast } from "sonner"
 
-interface TechnicalResult {
-    id: string
-    application_id: string
-    question_id: string
-    answer: string
-    ai_score: number | null
-    ai_reasoning: string
-    question_text?: string
-    candidate_name?: string
-    job_title?: string
-    created_at?: string
-}
 
-interface GroupedAssessment {
-    application_id: string
-    candidate_name: string
-    job_title: string
-    created_at: string
-    results: TechnicalResult[]
-    average_score: number | null
-    status: 'completed' | 'pending'
-}
 
 interface AdminTechnicalResultsProps {
     applicationId?: string
 }
 
 export default function AdminTechnicalResults({ applicationId }: AdminTechnicalResultsProps) {
-    const supabase = getSupabaseClient()
-    const [grouped, setGrouped] = useState<GroupedAssessment[]>([])
-    const [loading, setLoading] = useState(true)
     const [expandedAppId, setExpandedAppId] = useState<string | null>(null)
     const [appToDelete, setAppToDelete] = useState<string | null>(null)
 
+    // Use React Query Hook
+    const { data: grouped = [], isLoading: loading, refetch } = useTechnicalResults(applicationId)
     const deleteApplicationMutation = useDeleteApplication()
 
-    useEffect(() => {
-        fetchResults()
-    }, [applicationId])
+    // No useEffect needed!
 
-    const fetchResults = async () => {
-        setLoading(true)
-        try {
-            let query = supabase
-                .from('technical_assessment_responses')
-                .select(`
-                    *,
-                    technical_assessments (question),
-                    job_applications (
-                        applicant_id,
-                        created_at,
-                        job_roles (title)
-                    )
-                `)
-                .order('created_at', { ascending: false })
-
-            if (applicationId) {
-                query = query.eq('application_id', applicationId)
-            } else {
-                query = query.limit(200) // Increase limit to get enough groups
-            }
-
-            const { data, error } = await query
-
-            if (error) throw error
-
-            if (data) {
-                // Enrich and Group
-                const enriched: TechnicalResult[] = await Promise.all(data.map(async (item: any) => {
-                    let candidateName = "Unknown"
-                    if (item.job_applications?.applicant_id) {
-                        const { data: p } = await supabase.from('profiles').select('full_name').eq('id', item.job_applications.applicant_id).single()
-                        if (p) candidateName = p.full_name
-                    }
-
-                    return {
-                        id: item.id,
-                        application_id: item.application_id,
-                        question_id: item.question_id,
-                        answer: item.answer,
-                        ai_score: item.ai_score,
-                        ai_reasoning: item.ai_reasoning,
-                        question_text: item.technical_assessments?.question,
-                        candidate_name: candidateName,
-                        job_title: item.job_applications?.job_roles?.title,
-                        created_at: item.created_at
-                    }
-                }))
-
-                // Group by application_id
-                const groups: Record<string, GroupedAssessment> = {}
-
-                enriched.forEach(item => {
-                    if (!groups[item.application_id]) {
-                        groups[item.application_id] = {
-                            application_id: item.application_id,
-                            candidate_name: item.candidate_name || "Unknown",
-                            job_title: item.job_title || "Unknown Job",
-                            created_at: item.created_at || "",
-                            results: [],
-                            average_score: 0,
-                            status: 'completed'
-                        }
-                    }
-                    groups[item.application_id].results.push(item)
-                })
-
-                // Calculate stats
-                const processed = Object.values(groups).map(g => {
-                    const totalScore = g.results.reduce((acc, curr) => acc + (curr.ai_score || 0), 0)
-                    const count = g.results.length
-                    const hasPending = g.results.some(r => r.ai_score === null || r.ai_score === undefined)
-
-                    return {
-                        ...g,
-                        average_score: count > 0 ? (totalScore / count) : 0,
-                        status: hasPending ? 'pending' as const : 'completed' as const
-                    }
-                })
-
-                setGrouped(processed)
-            }
-        } catch (error) {
-            console.error("Error fetching technical results:", error)
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const toggleExpand = (appId: string) => {
         setExpandedAppId(expandedAppId === appId ? null : appId)
@@ -170,7 +57,7 @@ export default function AdminTechnicalResults({ applicationId }: AdminTechnicalR
             await deleteApplicationMutation.mutateAsync(appToDelete)
             setAppToDelete(null)
             toast.success("Application deleted successfully")
-            fetchResults() // Refresh the list
+            // Query invalidation handles refresh
         } catch (error) {
             console.error(error)
             toast.error("Failed to delete application")

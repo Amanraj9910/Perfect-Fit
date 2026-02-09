@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/providers/auth-provider";
 import { useCandidateProfile } from "@/lib/hooks/use-candidate";
+import { candidateApi, storageApi } from "@/lib/api";
+import { getSupabaseClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -40,9 +42,25 @@ export default function ProfilePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [uploadingResume, setUploadingResume] = useState(false);
     const [uploadingPic, setUploadingPic] = useState(false);
+    const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+    // Track if form has been initialized to prevent reset during typing
+    const formInitialized = useRef(false);
 
     // Use React Query for profile data
-    const { data: profile, isLoading, refetch } = useCandidateProfile();
+    const { data: profile, isLoading, refetch, error } = useCandidateProfile();
+
+    // Fallback for stuck loading state
+    useEffect(() => {
+        if (isLoading) {
+            const timer = setTimeout(() => {
+                setLoadingTimeout(true);
+            }, 5000); // 5 second timeout
+            return () => clearTimeout(timer);
+        } else {
+            setLoadingTimeout(false);
+        }
+    }, [isLoading]);
 
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(profileFormSchema),
@@ -56,9 +74,9 @@ export default function ProfilePage() {
         },
     });
 
-    // Sync form with profile data when loaded
+    // Sync form with profile data when loaded - ONLY ONCE
     useEffect(() => {
-        if (profile) {
+        if (profile && !formInitialized.current) {
             form.reset({
                 full_name: profile.full_name || "",
                 phone: profile.phone || "",
@@ -67,15 +85,28 @@ export default function ProfilePage() {
                 bio: profile.bio || "",
                 experience_years: profile.experience_years || 0,
             });
+            formInitialized.current = true;
         }
-    }, [profile, form]);
+    }, [profile]); // Removed 'form' from dependencies to prevent loops
+
+    // Reset initialization flag when component unmounts or user changes
+    useEffect(() => {
+        return () => {
+            formInitialized.current = false;
+        };
+    }, [user?.id]);
 
     async function onSubmit(data: ProfileFormValues) {
-        if (!user) return;
+        if (!user) {
+            console.error("User must be logged in to update profile");
+            alert("You must be logged in to update your profile.");
+            return;
+        }
+
         setIsSaving(true);
 
         try {
-            const supabase = (await import("@/lib/supabase")).getSupabaseClient();
+            const supabase = getSupabaseClient();
 
             // Update candidate_profile
             const { error } = await supabase.from("candidate_profiles").upsert({
@@ -87,13 +118,14 @@ export default function ProfilePage() {
             if (error) throw error;
 
             // Refresh auth profile if name changed
-            refreshProfile();
+            await refreshProfile();
+
             // Refetch React Query data
-            refetch();
+            await refetch();
 
         } catch (error) {
             console.error("Error updating profile:", error);
-            // Show toast?
+            alert("Failed to update profile. Please try again.");
         } finally {
             setIsSaving(false);
         }
@@ -108,35 +140,108 @@ export default function ProfilePage() {
         setUploading(true);
 
         try {
-            const { candidateApi } = await import("@/lib/api");
-
             if (isResume) {
+                // Validate file type
+                const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+                if (!validTypes.includes(file.type)) {
+                    throw new Error('Please upload a PDF or Word document');
+                }
                 await candidateApi.uploadResume(file);
             } else {
+                // Validate image type
+                if (!file.type.startsWith('image/')) {
+                    throw new Error('Please upload an image file');
+                }
                 await candidateApi.uploadPicture(file);
             }
 
             // Refetch profile to get new URLs
-            refetch();
+            await refetch();
 
             if (!isResume) {
-                refreshProfile(); // Update avatar in navbar
+                await refreshProfile(); // Update avatar in navbar
             }
 
         } catch (error) {
             console.error(`Error uploading ${type}:`, error);
-            alert(`Failed to upload ${type}. Please try again.`);
+            const errorMessage = error instanceof Error ? error.message : `Failed to upload ${type}. Please try again.`;
+            alert(errorMessage);
         } finally {
             setUploading(false);
+            // Reset file input
+            event.target.value = '';
         }
     }
 
-    if (isLoading) {
-        return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    async function handleResumeView(e: React.MouseEvent) {
+        e.preventDefault();
+        if (!profile?.resume_url) return;
+
+        try {
+            const url = await storageApi.signUrl(profile.resume_url, true);
+            window.open(url, '_blank');
+        } catch (err) {
+            console.error("Failed to download resume", err);
+            // Fallback to direct URL
+            window.open(profile.resume_url, '_blank');
+        }
+    }
+
+    if (isLoading && !loadingTimeout) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <div className="text-center space-y-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                    <p className="text-muted-foreground">Loading your profile...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (loadingTimeout || error) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Card className="max-w-md">
+                    <CardHeader>
+                        <CardTitle>Unable to Load Profile</CardTitle>
+                        <CardDescription>
+                            {error ? "There was an error loading your profile." : "Loading is taking longer than expected."}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {error && (
+                            <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
+                                Error: {error instanceof Error ? error.message : "Unknown error"}
+                            </div>
+                        )}
+                        <div className="flex gap-2">
+                            <Button onClick={() => window.location.reload()} variant="outline">
+                                Refresh Page
+                            </Button>
+                            <Button onClick={() => refetch()}>
+                                Try Again
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Card className="max-w-md">
+                    <CardHeader>
+                        <CardTitle>Authentication Required</CardTitle>
+                        <CardDescription>Please log in to view your profile.</CardDescription>
+                    </CardHeader>
+                </Card>
+            </div>
+        );
     }
 
     return (
-
         <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 space-y-8">
             <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">Candidate Profile</h1>
@@ -151,19 +256,30 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-6 py-6">
                         <Avatar className="h-40 w-40 ring-4 ring-background shadow-xl">
-                            {/* Use backend profile URL which is signed. Avoid authProfile.avatar_url which is raw/unsigned */}
                             <AvatarImage src={profile?.profile_pic_url || ""} className="object-cover" />
-                            <AvatarFallback className="text-5xl bg-primary/5">{form.getValues("full_name")?.[0] || <UserIcon className="h-16 w-16 text-muted-foreground/50" />}</AvatarFallback>
+                            <AvatarFallback className="text-5xl bg-primary/5">
+                                {form.watch("full_name")?.[0]?.toUpperCase() || <UserIcon className="h-16 w-16 text-muted-foreground/50" />}
+                            </AvatarFallback>
                         </Avatar>
                         <div className="w-full">
-                            <Button variant="outline" className="w-full relative overflow-hidden group border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all">
-                                {uploadingPic ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />}
-                                Change Photo
+                            <Button
+                                variant="outline"
+                                className="w-full relative overflow-hidden group border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                                disabled={uploadingPic}
+                                type="button"
+                            >
+                                {uploadingPic ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                ) : (
+                                    <Upload className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                )}
+                                {uploadingPic ? "Uploading..." : "Change Photo"}
                                 <input
                                     type="file"
-                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
                                     accept="image/*"
                                     onChange={(e) => handleFileUpload(e, 'picture')}
+                                    disabled={uploadingPic}
                                 />
                             </Button>
                         </div>
@@ -251,6 +367,9 @@ export default function ProfilePage() {
                                                         {...field}
                                                     />
                                                 </FormControl>
+                                                <FormDescription className="text-xs text-right">
+                                                    {field.value?.length || 0} / 1000 characters
+                                                </FormDescription>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -273,43 +392,49 @@ export default function ProfilePage() {
                                             {profile?.resume_url ? (
                                                 <button
                                                     type="button"
-                                                    onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        try {
-                                                            const { storageApi } = await import("@/lib/api");
-                                                            const url = await storageApi.signUrl(profile.resume_url!, true);
-                                                            window.open(url, '_blank');
-                                                        } catch (err) {
-                                                            console.error("Failed to download resume", err);
-                                                            window.open(profile.resume_url, '_blank');
-                                                        }
-                                                    }}
-                                                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline truncate transition-colors focus:outline-none"
+                                                    onClick={handleResumeView}
+                                                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline truncate transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
                                                 >
-                                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                                    <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                                                     View Current Resume
                                                 </button>
                                             ) : (
                                                 <p className="text-sm text-muted-foreground italic">No resume uploaded yet</p>
                                             )}
                                         </div>
-                                        <Button variant="secondary" size="sm" className="relative group overflow-hidden" disabled={uploadingResume} type="button">
-                                            {uploadingResume ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2 group-hover:-translate-y-0.5 transition-transform" />}
-                                            {profile?.resume_url ? "Replace" : "Upload"}
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="relative group overflow-hidden"
+                                            disabled={uploadingResume}
+                                            type="button"
+                                        >
+                                            {uploadingResume ? (
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                            ) : (
+                                                <Upload className="h-4 w-4 mr-2 group-hover:-translate-y-0.5 transition-transform" />
+                                            )}
+                                            {uploadingResume ? "Uploading..." : profile?.resume_url ? "Replace" : "Upload"}
                                             <input
                                                 type="file"
-                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                                className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
                                                 accept=".pdf,.doc,.docx"
                                                 onChange={(e) => handleFileUpload(e, 'resume')}
+                                                disabled={uploadingResume}
                                             />
                                         </Button>
                                     </div>
                                 </div>
 
                                 <div className="flex justify-end pt-4 border-t border-muted/50">
-                                    <Button type="submit" disabled={isSaving} size="lg" className="w-full sm:w-auto shadow-lg hover:shadow-xl transition-all">
+                                    <Button
+                                        type="submit"
+                                        disabled={isSaving || !form.formState.isDirty}
+                                        size="lg"
+                                        className="w-full sm:w-auto shadow-lg hover:shadow-xl transition-all"
+                                    >
                                         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Save Profile Changes
+                                        {isSaving ? "Saving..." : "Save Profile Changes"}
                                     </Button>
                                 </div>
                             </form>

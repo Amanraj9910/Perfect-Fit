@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { adminApi } from '@/lib/api'
+import { useAdminAssessmentDetail } from '@/lib/hooks/use-admin-queries'
 import { uiLogger, logError } from '@/lib/logger'
 import { Loader2, Play, Pause, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,31 +8,12 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 
 export function AssessmentDetail({ id }: { id: string }) {
-    const [data, setData] = useState<any>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const { data: data, isLoading: loading, error: queryError } = useAdminAssessmentDetail(id)
+    const error = queryError instanceof Error ? queryError.message : queryError ? String(queryError) : null
+
     const [playingId, setPlayingId] = useState<string | null>(null)
     const [audioUrl, setAudioUrl] = useState<string | null>(null)
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-
-    useEffect(() => {
-        const fetchDetail = async () => {
-            uiLogger.info(`AssessmentDetail: Fetching details for ${id}`)
-            try {
-                const res = await adminApi.getAssessmentDetail(id)
-                uiLogger.debug('AssessmentDetail: Received data', res)
-                setData(res)
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Failed to load assessment'
-                logError(err instanceof Error ? err : new Error(errorMessage), 'AssessmentDetail')
-                setError(errorMessage)
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchDetail()
-    }, [id])
-
     const handlePlayAudio = async (responseId: string) => {
         if (playingId === responseId) {
             setPlayingId(null)

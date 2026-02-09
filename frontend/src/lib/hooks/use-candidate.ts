@@ -10,3 +10,12 @@ export function useCandidateProfile() {
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
+
+export function useMyApplications() {
+    return useQuery({
+        queryKey: ['applications', 'me'],
+        queryFn: () => import('../api').then(({ applicationsApi }) => applicationsApi.listMine()),
+        retry: 1,
+        staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+}

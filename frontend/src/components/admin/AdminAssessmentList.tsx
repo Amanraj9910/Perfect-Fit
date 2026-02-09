@@ -131,6 +131,9 @@ export default function AdminAssessmentList() {
                         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                                 <DialogTitle>Assessment Details</DialogTitle>
+                                <DialogDescription className="hidden">
+                                    Detailed view of the candidate's assessment performance.
+                                </DialogDescription>
                             </DialogHeader>
                             {selectedAssessmentId && (
                                 <AssessmentDetail id={selectedAssessmentId} />

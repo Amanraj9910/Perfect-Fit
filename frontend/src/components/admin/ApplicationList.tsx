@@ -2,49 +2,34 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { applicationsApi, JobApplication } from '@/lib/api'
+import { useAdminApplications, useUpdateApplicationStatus } from '@/lib/hooks/use-admin-queries'
 import { XCircle, FileText, ExternalLink, Loader2 } from 'lucide-react'
 
 export default function ApplicationList() {
-    const [applications, setApplications] = useState<JobApplication[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const { data: applications = [], isLoading: loading, error: queryError } = useAdminApplications()
+    const error = queryError instanceof Error ? queryError.message : queryError ? String(queryError) : null
+
+    // const [applications, setApplications] = useState<JobApplication[]>([]) // Removed in favor of hook
+    // const [loading, setLoading] = useState(true) // Removed in favor of hook
+    // const [error, setError] = useState<string | null>(null) // Removed in favor of hook
+
     const [selectedApp, setSelectedApp] = useState<JobApplication | null>(null)
     const [feedback, setFeedback] = useState('')
-    const [actionLoading, setActionLoading] = useState(false)
 
-    const fetchApplications = useCallback(async () => {
-        try {
-            setLoading(true)
-            const data = await applicationsApi.listAll()
-            setApplications(Array.isArray(data) ? data : [])
-        } catch (err) {
-            setError('Failed to load applications')
-            console.error(err)
-        } finally {
-            setLoading(false)
-        }
-    }, [])
+    const updateStatusMutation = useUpdateApplicationStatus()
+    const actionLoading = updateStatusMutation.isPending
 
-    useEffect(() => {
-        fetchApplications()
-    }, [fetchApplications])
-
-    const handleStatusUpdate = async (id: string, status: JobApplication['status']) => {
-        try {
-            setActionLoading(true)
-            await applicationsApi.updateStatus(id, status, feedback)
-            // Optimistic update
-            setApplications(apps => apps.map(app =>
-                app.id === id ? { ...app, status } : app
-            ))
-            setSelectedApp(null)
-            setFeedback('')
-        } catch (err) {
-            console.error("Failed to update status", err)
-            alert("Failed to update status")
-        } finally {
-            setActionLoading(false)
-        }
+    const handleStatusUpdate = (id: string, status: JobApplication['status']) => {
+        updateStatusMutation.mutate({ id, status, feedback }, {
+            onSuccess: () => {
+                setSelectedApp(null)
+                setFeedback('')
+            },
+            onError: (err) => {
+                console.error("Failed to update status", err)
+                alert("Failed to update status")
+            }
+        })
     }
 
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import {
     Card,
@@ -17,44 +16,17 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { type JobApplication } from "@/lib/api";
 
+import { useMyApplications } from "@/lib/hooks/use-candidate";
+
 export default function CandidateDashboard() {
     const router = useRouter();
-    const { user, profile, session, loading: authLoading } = useAuth();
-    const [applications, setApplications] = useState<JobApplication[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { user, session, loading: authLoading } = useAuth();
 
-    useEffect(() => {
-        // If auth is still loading, do nothing yet
-        if (authLoading) return;
+    const { data: applications = [], isLoading: appsLoading } = useMyApplications();
+    const loading = authLoading || (!!user && appsLoading);
 
-        // If auth finished but no user, stop local loading (redirect usually handles this)
-        if (!user) {
-            setLoading(false);
-            return;
-        }
-
-        async function fetchApplications() {
-            setLoading(true);
-            try {
-                // Dynamically import api to avoid circular dependencies during SSR if any
-                // though usually safe. Using direct import at top is better but let's stick to logic flow.
-                // Better: rely on the api helper.
-                const { applicationsApi } = await import("@/lib/api");
-
-                const data = await applicationsApi.listMine();
-                setApplications(data);
-            } catch (error) {
-                console.error("Error fetching applications", error);
-                // toast.error("Failed to load applications"); // Optional
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        fetchApplications();
-    }, [user, authLoading]);
-
-    if (authLoading || loading) {
+    // No useEffect needed for fetching!
+    if (loading) {
         return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
 

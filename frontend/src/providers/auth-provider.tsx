@@ -58,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('Error fetching profile:', error)
             return null
         }
+        console.log("Profile fetched successfully:", data);
         return data as Profile
     }
 
@@ -243,7 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(null)
             setSession(null)
             setProfileLoaded(true) // Reset to loaded so we don't block UI waiting for nothing
-            router.refresh() // Ensure server components are aware of signout
+            // Removed router.refresh() to avoid double reload effect before redirect
         }
     }
 

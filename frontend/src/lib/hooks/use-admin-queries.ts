@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getSupabaseClient } from '@/lib/supabase'
 import { adminApi, applicationsApi, jobsApi, JobRole, JobApplication, JobRoleInput } from '@/lib/api'
 
 // ============================================
@@ -13,11 +14,38 @@ export const adminQueryKeys = {
     applications: () => [...adminQueryKeys.all, 'applications'] as const,
     jobs: () => [...adminQueryKeys.all, 'jobs'] as const,
     pendingJobs: () => [...adminQueryKeys.all, 'jobs', 'pending'] as const,
+    technicalResults: (applicationId?: string) => [...adminQueryKeys.all, 'technicalResults', applicationId || 'all'] as const,
 }
 
 export const employeeQueryKeys = {
     all: ['employee'] as const,
     jobs: () => [...employeeQueryKeys.all, 'jobs'] as const,
+}
+
+// ============================================
+// Types
+// ============================================
+export interface TechnicalResult {
+    id: string
+    application_id: string
+    question_id: string
+    answer: string
+    ai_score: number | null
+    ai_reasoning: string
+    question_text?: string
+    candidate_name?: string
+    job_title?: string
+    created_at?: string
+}
+
+export interface GroupedAssessment {
+    application_id: string
+    candidate_name: string
+    job_title: string
+    created_at: string
+    results: TechnicalResult[]
+    average_score: number | null
+    status: 'completed' | 'pending'
 }
 
 // ============================================
@@ -115,6 +143,94 @@ export function useDeleteAssessment() {
     })
 }
 
+export function useTechnicalResults(applicationId?: string) {
+    return useQuery({
+        queryKey: adminQueryKeys.technicalResults(applicationId),
+        queryFn: async (): Promise<GroupedAssessment[]> => {
+            const supabase = getSupabaseClient()
+            let query = supabase
+                .from('technical_assessment_responses')
+                .select(`
+                    *,
+                    technical_assessments (question),
+                    job_applications (
+                        applicant_id,
+                        created_at,
+                        job_roles (title)
+                    )
+                `)
+                .order('created_at', { ascending: false })
+
+            if (applicationId) {
+                query = query.eq('application_id', applicationId)
+            } else {
+                query = query.limit(200)
+            }
+
+            const { data, error } = await query
+
+            if (error) throw error
+            if (!data) return []
+
+            // Enrich and Group
+            const enriched: TechnicalResult[] = await Promise.all(data.map(async (item: any) => {
+                let candidateName = "Unknown"
+                if (item.job_applications?.applicant_id) {
+                    // We try to fetch the profile name. Note: this is N+1 but Supabase is fast.
+                    // Optimally, join profiles if possible or assume cache.
+                    const { data: p } = await supabase.from('profiles').select('full_name').eq('id', item.job_applications.applicant_id).single()
+                    if (p) candidateName = p.full_name
+                }
+
+                return {
+                    id: item.id,
+                    application_id: item.application_id,
+                    question_id: item.question_id,
+                    answer: item.answer,
+                    ai_score: item.ai_score,
+                    ai_reasoning: item.ai_reasoning,
+                    question_text: item.technical_assessments?.question,
+                    candidate_name: candidateName,
+                    job_title: item.job_applications?.job_roles?.title,
+                    created_at: item.created_at
+                }
+            }))
+
+            // Group by application_id
+            const groups: Record<string, GroupedAssessment> = {}
+
+            enriched.forEach(item => {
+                if (!groups[item.application_id]) {
+                    groups[item.application_id] = {
+                        application_id: item.application_id,
+                        candidate_name: item.candidate_name || "Unknown",
+                        job_title: item.job_title || "Unknown Job",
+                        created_at: item.created_at || "",
+                        results: [],
+                        average_score: 0,
+                        status: 'completed'
+                    }
+                }
+                groups[item.application_id].results.push(item)
+            })
+
+            // Calculate stats
+            return Object.values(groups).map(g => {
+                const totalScore = g.results.reduce((acc, curr) => acc + (curr.ai_score || 0), 0)
+                const count = g.results.length
+                const hasPending = g.results.some(r => r.ai_score === null || r.ai_score === undefined)
+
+                return {
+                    ...g,
+                    average_score: count > 0 ? (totalScore / count) : 0,
+                    status: hasPending ? 'pending' as const : 'completed' as const
+                }
+            })
+        },
+        staleTime: 1000 * 60 * 5
+    })
+}
+
 // ============================================
 // Admin Applications Hooks
 // ============================================
@@ -149,6 +265,7 @@ export function useDeleteApplication() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: adminQueryKeys.applications() })
             queryClient.invalidateQueries({ queryKey: adminQueryKeys.stats() })
+            queryClient.invalidateQueries({ queryKey: ['admin', 'technicalResults'] }) // Invalidate technical results too
         },
     })
 }

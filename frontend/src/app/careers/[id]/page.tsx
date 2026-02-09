@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { jobsApi, JobRole, ApplicationInput } from '@/lib/api'
+import { useJob } from '@/lib/hooks/use-jobs'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,9 +31,9 @@ export default function JobDetailPage() {
     const { user, profile } = useAuth()
     const jobId = params.id as string
 
-    const [job, setJob] = useState<JobRole | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    // Use React Query hook for job details
+    const { data: job, isLoading: loading, error: queryError } = useJob(jobId)
+    const error = queryError instanceof Error ? queryError.message : queryError ? 'Failed to load job details' : null
 
     // Application state
     const [showApplicationForm, setShowApplicationForm] = useState(false)
@@ -44,33 +45,6 @@ export default function JobDetailPage() {
     const [coverLetter, setCoverLetter] = useState('')
     const [phone, setPhone] = useState('')
     const [linkedinUrl, setLinkedinUrl] = useState('')
-
-    useEffect(() => {
-        fetchJob()
-    }, [jobId])
-
-    const fetchJob = async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            // For public access, we need to check if job is available
-            // If user is authenticated, use the regular endpoint
-            // If not, we'll need to get it from public list
-            const publicJobs = await jobsApi.listPublic()
-            const foundJob = publicJobs.find(j => j.id === jobId)
-
-            if (foundJob) {
-                setJob(foundJob)
-            } else {
-                setError('Job not found or no longer available')
-            }
-        } catch (err) {
-            console.error('Error fetching job:', err)
-            setError(err instanceof Error ? err.message : 'Failed to load job details')
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const handleApply = async (e: React.FormEvent) => {
         e.preventDefault()

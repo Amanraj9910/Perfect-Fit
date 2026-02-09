@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { jobsApi, JobRole, TechnicalQuestion, assessmentApi, applicationsApi, JobApplication } from '@/lib/api'
+import { useAuthenticatedJob } from '@/lib/hooks/use-jobs'
+import { useMyApplications } from '@/lib/hooks/use-candidate'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,12 +19,17 @@ export default function TechnicalAssessmentPage() {
     const { user, loading: authLoading } = useAuth()
     const jobId = params.jobId as string
 
-    const [job, setJob] = useState<JobRole | null>(null)
-    const [loading, setLoading] = useState(true)
     const [answers, setAnswers] = useState<Record<number, string>>({})
     const [submitting, setSubmitting] = useState(false)
     const [completed, setCompleted] = useState(false)
-    const [application, setApplication] = useState<JobApplication | null>(null)
+
+    // React Query Hooks
+    const { data: job, isLoading: jobLoading, error: jobError } = useAuthenticatedJob(jobId)
+    const { data: applications = [], isLoading: appsLoading } = useMyApplications()
+
+    // Derived state
+    const application = applications.find(a => a.job_id === jobId)
+    const loading = jobLoading || appsLoading
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -30,35 +37,13 @@ export default function TechnicalAssessmentPage() {
         }
     }, [authLoading, user, router])
 
+    // Redirect if no application found (after loading)
     useEffect(() => {
-        if (jobId && user) {
-            fetchJob()
+        if (!loading && !application && job) {
+            toast.error("Application not found. Please apply first.")
+            router.push(`/jobs`) // Redirect to jobs list instead of infinite loop on detail page
         }
-    }, [jobId, user])
-
-    const fetchJob = async () => {
-        try {
-            const [jobData, appsData] = await Promise.all([
-                jobsApi.get(jobId),
-                applicationsApi.listMine()
-            ])
-            setJob(jobData)
-
-            // Find application for this job
-            const app = appsData.find(a => a.job_id === jobId)
-            if (app) {
-                setApplication(app)
-            } else {
-                toast.error("Application not found. Please apply first.")
-                router.push(`/jobs/${jobId}`)
-            }
-        } catch (error) {
-            console.error("Failed to fetch job or application", error)
-            toast.error("Failed to load details")
-        } finally {
-            setLoading(false)
-        }
-    }
+    }, [loading, application, job, router])
 
     const handleAnswerChange = (index: number, value: string) => {
         setAnswers(prev => ({
@@ -75,7 +60,7 @@ export default function TechnicalAssessmentPage() {
         }
 
         // Validate all questions answered
-        const allAnswered = job.technical_questions.every((_, idx) =>
+        const allAnswered = job.technical_questions.every((_: TechnicalQuestion, idx: number) =>
             answers[idx] && answers[idx].trim().length > 0
         )
 
@@ -87,7 +72,7 @@ export default function TechnicalAssessmentPage() {
         setSubmitting(true)
 
         try {
-            const formattedAnswers = job.technical_questions.map((q, idx) => ({
+            const formattedAnswers = job.technical_questions.map((q: TechnicalQuestion, idx: number) => ({
                 question_id: q.id!, // Assuming id exists on TechnicalQuestion from backend response
                 answer: answers[idx]
             }))
@@ -102,7 +87,7 @@ export default function TechnicalAssessmentPage() {
             // Let's assume we need to cast or fix type if explicit ID is missing.
 
             // Safety check for question IDs
-            const validAnswers = formattedAnswers.filter(a => a.question_id)
+            const validAnswers = formattedAnswers.filter((a: { question_id: string; answer: string }) => a.question_id)
             if (validAnswers.length !== formattedAnswers.length) {
                 // If ids are missing, we can't submit properly.
                 // For now, let's assume validIds.
@@ -180,7 +165,7 @@ export default function TechnicalAssessmentPage() {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {job.technical_questions && job.technical_questions.length > 0 ? (
-                            job.technical_questions.map((q, idx) => (
+                            job.technical_questions.map((q: TechnicalQuestion, idx: number) => (
                                 <div key={idx} className="space-y-3">
                                     <Label className="text-base">
                                         {idx + 1}. {q.question}

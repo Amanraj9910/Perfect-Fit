@@ -160,7 +160,12 @@ export default function AdminApplicationsList() {
                                         </button>
                                     )}
                                     {app.linkedin_url && (
-                                        <a href={app.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center text-blue-600 hover:underline">
+                                        <a
+                                            href={app.linkedin_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center text-blue-600 hover:underline"
+                                        >
                                             <ExternalLink className="h-4 w-4 mr-1" /> LinkedIn
                                         </a>
                                     )}

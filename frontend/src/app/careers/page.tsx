@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { jobsApi, JobRole } from '@/lib/api'
+import { usePublicJobs } from '@/lib/hooks/use-jobs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,29 +21,13 @@ import {
 } from 'lucide-react'
 
 export default function CareersPage() {
-    const [jobs, setJobs] = useState<JobRole[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
 
-    useEffect(() => {
-        fetchJobs()
-    }, [])
+    // Use React Query hook
+    const { data: jobs = [], isLoading: loading, error: queryError, refetch } = usePublicJobs()
+    const error = queryError instanceof Error ? queryError.message : queryError ? 'Failed to load job listings' : null
 
-    const fetchJobs = async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            const data = await jobsApi.listPublic()
-            setJobs(data || [])
-        } catch (err) {
-            console.error('Error fetching jobs:', err)
-            setError(err instanceof Error ? err.message : 'Failed to load job listings')
-        } finally {
-            setLoading(false)
-        }
-    }
 
     // Get unique departments
     const departments = Array.from(new Set(jobs.map(job => job.department)))
@@ -164,7 +149,7 @@ export default function CareersPage() {
                                     <Button
                                         variant="outline"
                                         className="mt-4"
-                                        onClick={fetchJobs}
+                                        onClick={() => refetch()}
                                     >
                                         Try Again
                                     </Button>
