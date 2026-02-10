@@ -23,7 +23,7 @@ interface AuthContextType {
     loading: boolean
     profileLoaded: boolean  // New: indicates profile fetch attempt completed
     isAdmin: boolean
-    signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>
+    signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null; profile?: Profile | null }>
     signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: AuthError | null }>
     signInWithGoogle: () => Promise<{ error: AuthError | null }>
     signInWithAzure: () => Promise<{ error: AuthError | null }>
@@ -141,10 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     } else {
                         setUser(null)
                         setProfile(null)
+                        setProfileLoaded(true)
                     }
                 } catch (e) {
                     console.error('[Auth] Auth change handler failed:', e)
                 } finally {
+                    // Only update loading states if they haven't been set yet
+                    // This prevents navbar flicker on subsequent auth events
                     setProfileLoaded(true)
                     setLoading(false)
                 }
@@ -155,8 +158,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const signInWithEmail = async (email: string, password: string) => {
-        setLoading(true)
+    const signInWithEmail = async (email: string, password: string): Promise<{ error: AuthError | null; profile?: Profile | null }> => {
+        // NOTE: Don't set loading=true here — it causes navbar to show skeleton during login
+        // The calling code already manages its own loading state
         loginInProgressRef.current = true // Prevent onAuthStateChange from interfering
 
         try {
@@ -169,27 +173,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(data.session.user)
 
                 // Fetch profile and set it
+                let fetchedProfile: Profile | null = null
                 try {
-                    const profile = await fetchProfile(data.session.user.id);
-                    setProfile(profile);
+                    fetchedProfile = await fetchProfile(data.session.user.id);
+                    setProfile(fetchedProfile);
                 } catch (profileError) {
                     console.error("Profile fetch failed during login:", profileError);
                 }
 
                 toast.success("Signed in successfully")
+                return { error: null, profile: fetchedProfile }
             } else if (error) {
                 toast.error(error.message)
+                return { error }
             }
-            return { data, error }
+            return { error: null }
         } catch (err: any) {
             console.error("Unexpected error during sign in:", err)
             toast.error("An unexpected error occurred")
-            return { data: { user: null, session: null }, error: err }
+            return { error: err }
         } finally {
-            // CRITICAL: Always set these in finally block to prevent stuck states
+            // CRITICAL: Always ensure profileLoaded is true and loading is false
             setProfileLoaded(true)
             setLoading(false)
-            loginInProgressRef.current = false // Re-enable onAuthStateChange
+            // Small delay before re-enabling onAuthStateChange to prevent
+            // the SIGNED_IN event from re-triggering a fetch cycle
+            setTimeout(() => {
+                loginInProgressRef.current = false
+            }, 100)
         }
     }
 

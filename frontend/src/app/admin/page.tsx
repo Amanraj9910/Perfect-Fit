@@ -21,6 +21,8 @@ export default function AdminPage() {
     const queryClient = useQueryClient()
     const { user, profile, loading: authLoading, profileLoaded, signOut, isAdmin } = useAuth()
 
+    // Active tab — controlled so we can use forceMount with hidden
+    const [activeTab, setActiveTab] = useState('dashboard')
     // Lifted state: assessment sub-tab selection (persists across admin tab switches)
     const [assessmentActiveTab, setAssessmentActiveTab] = useState<'english' | 'technical'>('english')
 
@@ -33,7 +35,6 @@ export default function AdminPage() {
 
         const cleanup = subscribeToAdminUpdates(queryClient, (message) => {
             console.log('[Realtime]', message)
-            // TODO: Add toast notification - install sonner: npm install sonner
         })
 
         return cleanup
@@ -90,7 +91,7 @@ export default function AdminPage() {
 
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
-                <Tabs defaultValue="dashboard" className="space-y-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList className="grid w-full grid-cols-5 lg:w-[650px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
@@ -109,26 +110,28 @@ export default function AdminPage() {
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="dashboard" className="space-y-4">
+                    {/* forceMount keeps all tabs mounted so React Query hooks fire immediately */}
+                    {/* hidden class hides inactive tabs while keeping them in the DOM */}
+                    <TabsContent value="dashboard" forceMount className={`space-y-4 ${activeTab !== 'dashboard' ? 'hidden' : ''}`}>
                         <AdminDashboard stats={stats} loading={statsLoading} />
                     </TabsContent>
 
-                    <TabsContent value="users" className="space-y-4">
+                    <TabsContent value="users" forceMount className={`space-y-4 ${activeTab !== 'users' ? 'hidden' : ''}`}>
                         <AdminUserList />
                     </TabsContent>
 
-                    <TabsContent value="assessments" className="space-y-4">
+                    <TabsContent value="assessments" forceMount className={`space-y-4 ${activeTab !== 'assessments' ? 'hidden' : ''}`}>
                         <AdminAssessmentList
                             activeTab={assessmentActiveTab}
                             onTabChange={setAssessmentActiveTab}
                         />
                     </TabsContent>
 
-                    <TabsContent value="jobs" className="space-y-4">
+                    <TabsContent value="jobs" forceMount className={`space-y-4 ${activeTab !== 'jobs' ? 'hidden' : ''}`}>
                         <AdminJobApprovals />
                     </TabsContent>
 
-                    <TabsContent value="applications" className="space-y-4">
+                    <TabsContent value="applications" forceMount className={`space-y-4 ${activeTab !== 'applications' ? 'hidden' : ''}`}>
                         <AdminApplicationsList />
                     </TabsContent>
 

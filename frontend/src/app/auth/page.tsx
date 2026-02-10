@@ -73,7 +73,7 @@ export default function AuthPage() {
         setError(null);
         setIsLoggingIn(true);
 
-        const { error } = await signInWithEmail(loginEmail, loginPassword);
+        const { error, profile: loginProfile } = await signInWithEmail(loginEmail, loginPassword);
 
         if (error) {
             console.error('Login error:', error.message);
@@ -81,9 +81,17 @@ export default function AuthPage() {
             setLoading(false);
             setIsLoggingIn(false);
         } else {
-            console.log('Login successful (provider response), waiting for user state update...');
+            // Redirect directly based on role — don't rely on useEffect
+            const role = loginProfile?.role || 'candidate';
+            console.log('Login successful, redirecting for role:', role);
+            if (['admin', 'hr', 'recruiter'].includes(role)) {
+                router.replace('/admin');
+            } else if (role === 'employee') {
+                router.replace('/employee');
+            } else {
+                router.replace('/dashboard');
+            }
         }
-        // If success, useEffect will handle redirect once user state updates
     };
 
     const handleSignup = async (e: React.FormEvent) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { useAdminStats } from '@/lib/hooks/use-admin-queries'
@@ -17,6 +17,11 @@ import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
 export default function HRPage() {
     const router = useRouter()
     const { user, profile, loading: authLoading, profileLoaded, signOut } = useAuth()
+
+    // Active tab — controlled so we can use forceMount with hidden
+    const [activeTab, setActiveTab] = useState('dashboard')
+    // Lifted state: assessment sub-tab selection (persists across tab switches)
+    const [assessmentActiveTab, setAssessmentActiveTab] = useState<'english' | 'technical'>('english')
 
     // Use React Query for stats - cached across tab switches
     const { data: stats, isLoading: statsLoading } = useAdminStats()
@@ -75,7 +80,7 @@ export default function HRPage() {
 
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
-                <Tabs defaultValue="dashboard" className="space-y-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
                         <TabsTrigger value="dashboard">
                             <LayoutDashboard className="h-4 w-4 mr-2" /> Dashboard
@@ -94,23 +99,28 @@ export default function HRPage() {
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="dashboard" className="space-y-4">
+                    {/* forceMount keeps all tabs mounted so React Query hooks fire immediately */}
+                    {/* hidden class hides inactive tabs while keeping them in the DOM */}
+                    <TabsContent value="dashboard" forceMount className={`space-y-4 ${activeTab !== 'dashboard' ? 'hidden' : ''}`}>
                         <AdminDashboard stats={stats} loading={statsLoading} />
                     </TabsContent>
 
-                    <TabsContent value="users" className="space-y-4">
+                    <TabsContent value="users" forceMount className={`space-y-4 ${activeTab !== 'users' ? 'hidden' : ''}`}>
                         <AdminUserList readonly={true} />
                     </TabsContent>
 
-                    <TabsContent value="assessments" className="space-y-4">
-                        <AdminAssessmentList />
+                    <TabsContent value="assessments" forceMount className={`space-y-4 ${activeTab !== 'assessments' ? 'hidden' : ''}`}>
+                        <AdminAssessmentList
+                            activeTab={assessmentActiveTab}
+                            onTabChange={setAssessmentActiveTab}
+                        />
                     </TabsContent>
 
-                    <TabsContent value="jobs" className="space-y-4">
+                    <TabsContent value="jobs" forceMount className={`space-y-4 ${activeTab !== 'jobs' ? 'hidden' : ''}`}>
                         <AdminJobApprovals />
                     </TabsContent>
 
-                    <TabsContent value="applications" className="space-y-4">
+                    <TabsContent value="applications" forceMount className={`space-y-4 ${activeTab !== 'applications' ? 'hidden' : ''}`}>
                         <AdminApplicationsList />
                     </TabsContent>
                 </Tabs>

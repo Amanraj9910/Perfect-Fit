@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { jobsApi, JobRole, ApplicationInput } from '@/lib/api'
@@ -30,6 +31,7 @@ export default function JobDetailPage() {
     const router = useRouter()
     const { user, profile } = useAuth()
     const jobId = params.id as string
+    const queryClient = useQueryClient()
 
     // Use React Query hook for job details
     const { data: job, isLoading: loading, error: queryError } = useJob(jobId)
@@ -57,6 +59,8 @@ export default function JobDetailPage() {
                 phone: phone || undefined,
                 linkedin_url: linkedinUrl || undefined
             })
+            // Invalidate applications cache
+            queryClient.invalidateQueries({ queryKey: ['applications', 'me'] })
             setApplicationSuccess(true)
             setShowApplicationForm(false)
         } catch (err) {

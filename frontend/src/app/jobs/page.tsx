@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ interface Job {
 export default function JobsPage() {
     const { user } = useAuth();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
     const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
 
@@ -58,14 +60,10 @@ export default function JobsPage() {
                 cover_letter: "Applied via Website",
             });
 
-            // Invalidate applications query to reflect new application immediately
-            // But for now, we just rely on local state update or optimistic update? 
-            // Actually, querying 'applications' again would be best, but we don't have invalidate here easily without queryClient.
-            // Let's rely on the fact that useMyApplications will re-fetch if we invalidate.
-            // For simplicity, we'll just alert.
+            // Invalidate applications cache to reflect new application immediately
+            queryClient.invalidateQueries({ queryKey: ['applications', 'me'] });
 
             alert("Application submitted successfully!");
-            // ideally we should invalidate ['applications', 'me'] here.
 
         } catch (error: any) {
             console.error("Apply error:", error);
