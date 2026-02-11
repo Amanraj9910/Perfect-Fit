@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { applicationsApi, JobApplication } from '@/lib/api'
+import { applicationsApi, JobApplication, storageApi } from '@/lib/api'
 import { useAdminApplications, useUpdateApplicationStatus } from '@/lib/hooks/use-admin-queries'
 import { XCircle, FileText, ExternalLink, Loader2 } from 'lucide-react'
 
@@ -110,7 +110,7 @@ export default function ApplicationList() {
                                         onClick={async (e) => {
                                             e.preventDefault();
                                             try {
-                                                const { storageApi } = await import("@/lib/api");
+                                                // Use static import - already imported at top
                                                 const url = await storageApi.signUrl(selectedApp.resume_url!, true);
                                                 window.open(url, '_blank');
                                             } catch (err) {

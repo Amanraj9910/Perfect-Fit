@@ -20,8 +20,8 @@ from core.logging import (
     setup_logging,
 )
 
-# Load environment variables
-load_dotenv(dotenv_path="../../.env")
+# Load environment variables (only applies in local dev; in containers, env vars are injected)
+load_dotenv(dotenv_path="../../.env", override=False)
 
 # Initialize logging
 setup_logging()

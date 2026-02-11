@@ -11,7 +11,22 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`
 
     const supabase = getSupabaseClient()
-    const { data: { session } } = await supabase.auth.getSession()
+
+    // CRITICAL FIX: Always try to refresh session first to get fresh token
+    // This prevents stale token issues that require page reload
+    let { data: { session } } = await supabase.auth.getSession()
+
+    // If session exists but might be stale, try refreshing it
+    if (session) {
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        if (refreshedSession) {
+            session = refreshedSession
+            apiLogger.debug(`Token refreshed for ${endpoint}`)
+        } else if (refreshError) {
+            apiLogger.warn(`Token refresh failed for ${endpoint}:`, refreshError.message)
+            // Continue with existing session - might still be valid
+        }
+    }
 
     if (!session?.access_token) {
         apiLogger.error(`fetchWithAuth: No session found for ${endpoint}`)
@@ -59,6 +74,10 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
             if (response.status === 422) {
                 console.error(`[API] Validation Error: ${JSON.stringify(errorBody.detail, null, 2)}`)
+            } else if (response.status === 401) {
+                console.error(`[API] Authentication Error - token may have expired`)
+                // Clear the toast that might have been shown and show a better message
+                toast.error("Session expired. Please sign in again.")
             } else {
                 console.error(`[API] HTTP Error ${response.status}: ${JSON.stringify(errorBody, null, 2)}`)
             }
@@ -71,7 +90,8 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
                 ? errorBody.detail.map((e: any) => `${e.loc?.join('.')}: ${e.msg}`).join(', ')
                 : errorBody.detail || `API Error: ${response.statusText}`
 
-            if (response.status !== 404) {
+            // Don't show duplicate toasts for 401 or 404
+            if (response.status !== 404 && response.status !== 401) {
                 toast.error(errorMessage)
             }
 

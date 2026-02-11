@@ -12,7 +12,8 @@ on:
 env:
   FRONTEND_APP_NAME: 'Perfect-Fit'
   NODE_VERSION: '20.x'
-  NEXT_PUBLIC_API_URL: 'https://perfect-fit-backend-ekggdvbxejhygje0.centralindia-01.azurewebsites.net'
+  # Set BACKEND_URL secret to your Container App FQDN, e.g. https://perfect-fit-backend.<hash>.centralindia.azurecontainerapps.io
+  NEXT_PUBLIC_API_URL: ${{ secrets.BACKEND_URL }}
 
 jobs:
   build-and-deploy:

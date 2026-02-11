@@ -15,7 +15,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/auth-provider'
 import { useAdminApplications, useUpdateApplicationStatus, useDeleteApplication } from '@/lib/hooks/use-admin-queries'
-import { JobApplication } from '@/lib/api'
+import { JobApplication, storageApi } from '@/lib/api'
 
 export default function AdminApplicationsList() {
     const { user } = useAuth();
@@ -146,7 +146,7 @@ export default function AdminApplicationsList() {
                                             onClick={async (e) => {
                                                 e.preventDefault();
                                                 try {
-                                                    const { storageApi } = await import("@/lib/api");
+                                                    // Use static import - already imported at top
                                                     const url = await storageApi.signUrl(app.resume_url!, true);
                                                     window.open(url, '_blank');
                                                 } catch (err) {

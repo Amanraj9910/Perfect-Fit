@@ -19,6 +19,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePublicJobs } from "@/lib/hooks/use-jobs";
 import { useMyApplications } from "@/lib/hooks/use-candidate";
+import { jobsApi } from "@/lib/api";
+import { toast } from "sonner";
 
 interface Job {
     id: string;
@@ -55,19 +57,26 @@ export default function JobsPage() {
 
         setApplyingJobId(jobId);
         try {
-            const { jobsApi } = await import("@/lib/api");
+            // Use static import - already imported at top
             await jobsApi.apply(jobId, {
                 cover_letter: "Applied via Website",
             });
 
             // Invalidate applications cache to reflect new application immediately
-            queryClient.invalidateQueries({ queryKey: ['applications', 'me'] });
+            await queryClient.invalidateQueries({ queryKey: ['applications', 'me'] });
 
-            alert("Application submitted successfully!");
+            toast.success("Application submitted successfully!");
 
         } catch (error: any) {
             console.error("Apply error:", error);
-            alert(`Application failed: ${error.message || "Unknown error"}`);
+            // Error toast is already shown by the API layer, but we can add context
+            if (error.message?.includes("Authentication required")) {
+                toast.error("Please sign in again to continue");
+                router.push("/auth?redirectTo=/jobs");
+            } else if (!error.message?.includes("API Error")) {
+                // Only show toast if API layer didn't already show one
+                toast.error(`Application failed: ${error.message || "Unknown error"}`);
+            }
         } finally {
             setApplyingJobId(null);
         }
