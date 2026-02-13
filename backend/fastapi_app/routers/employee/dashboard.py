@@ -20,41 +20,53 @@ async def get_dashboard_stats(
 ):
     """Get statistics for the employee dashboard."""
     try:
-        # We need counts of jobs by status
-        # Since Supabase postgrest-py aggregation is limited, we fetch and count or use count queries.
-        # Fetching all might be heavy if many jobs, but efficient enough for now. 
-        # Better: use select with count="exact" and filters.
-        
+        # Helper function to get job counts by status
+        # REMOVED head=True parameter - it's not supported in this version
         async def get_count(status_filter=None, is_open=None):
-            query = supabase.table("job_roles").select("*", count="exact", head=True).eq("created_by", user["id"])
+            """Get count of jobs with optional filters."""
+            query = supabase.table("job_roles")\
+                .select("id", count="exact")\
+                .eq("created_by", user["id"])
+            
             if status_filter:
                 query = query.eq("status", status_filter)
             if is_open is not None:
                 query = query.eq("is_open", is_open)
+            
             res = await query.execute()
-            return res.count
+            return res.count if res.count is not None else 0
 
+        # Get all job statistics
         total = await get_count()
         pending = await get_count(status_filter="pending")
         approved = await get_count(status_filter="approved")
         rejected = await get_count(status_filter="rejected")
         closed = await get_count(is_open=False)
         
-        # Recent approvals (approved in last 7 days? - logic can be complex via API, simple fetch for now)
-        # Fetch jobs created by user first to avoid complex join filtering issues
-        jobs_res = await supabase.table("job_roles").select("id").eq("created_by", user["id"]).execute()
-        job_ids = [j["id"] for j in jobs_res.data]
+        # Fetch recent activity for user's jobs
+        jobs_res = await supabase.table("job_roles")\
+            .select("id")\
+            .eq("created_by", user["id"])\
+            .execute()
+        
+        job_ids = [j["id"] for j in jobs_res.data] if jobs_res.data else []
         
         recent_activity = []
         if job_ids:
-            # FIXED: Changed from 'updated_at' to 'created_at' based on database schema
-            recent_activity_res = await supabase.table("approval_requests")\
-                .select("*, job_roles(title)")\
-                .in_("job_id", job_ids)\
-                .order("created_at", desc=True)\
-                .limit(5)\
-                .execute()
-            recent_activity = recent_activity_res.data
+            try:
+                # Use created_at since updated_at doesn't exist
+                recent_activity_res = await supabase.table("approval_requests")\
+                    .select("*, job_roles(title)")\
+                    .in_("job_id", job_ids)\
+                    .order("created_at", desc=True)\
+                    .limit(5)\
+                    .execute()
+                recent_activity = recent_activity_res.data if recent_activity_res.data else []
+                
+            except Exception as activity_err:
+                # If fetching activity fails, just log and continue
+                log_error(activity_err, context="get_dashboard_stats_activity")
+                api_logger.error(f"Failed to fetch recent activity: {activity_err}")
 
         return {
             "total_jobs": total,
@@ -65,6 +77,13 @@ async def get_dashboard_stats(
             "recent_activity": recent_activity
         }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403)
+        raise
     except Exception as e:
+        # Catch-all for unexpected errors
         log_error(e, context="get_dashboard_stats")
-        raise HTTPException(status_code=500, detail="Failed to fetch stats")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch dashboard statistics"
+        )
