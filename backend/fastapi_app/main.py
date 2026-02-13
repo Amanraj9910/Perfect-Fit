@@ -47,12 +47,23 @@ app = FastAPI(title="Perfect Fit Admin API", lifespan=lifespan)
 # CORS Configuration
 # Note: When allow_credentials=True, "*" is not allowed for allow_origins.
 # Use explicit origins (comma-separated) via CORS_ALLOW_ORIGINS env var.
-default_origins = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
+
+# UPDATED: Added production frontend URL to default origins
+default_origins = (
+    "http://localhost:3000,"
+    "http://localhost:3001,"
+    "http://127.0.0.1:3000,"
+    "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net"
+)
+
 origins = [
     origin.strip()
     for origin in os.environ.get("CORS_ALLOW_ORIGINS", default_origins).split(",")
     if origin.strip()
 ]
+
+# Log the allowed origins for debugging
+api_logger.info(f"🌐 CORS allowed origins: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -159,4 +170,3 @@ async def debug_health():
         results["error_type"] = type(e).__name__
 
     return results
-
