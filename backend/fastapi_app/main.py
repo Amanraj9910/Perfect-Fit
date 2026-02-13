@@ -11,6 +11,9 @@ from routers import jobs
 from routers import candidates
 from routers import applications
 from routers import storage
+from routers.employee import jobs as employee_jobs
+from routers.employee import dashboard as employee_dashboard
+from routers.employee import ai as employee_ai
 from core.logging import (
     api_logger,
     error_logger,
@@ -108,6 +111,11 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(candidates.router, prefix="/api/candidates", tags=["candidates"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])
 app.include_router(storage.router, prefix="/api/storage", tags=["storage"])
+
+# Employee Portal Routers
+app.include_router(employee_jobs.router, prefix="/api/employee", tags=["employee-jobs"])
+app.include_router(employee_dashboard.router, prefix="/api/employee", tags=["employee-dashboard"])
+app.include_router(employee_ai.router, prefix="/api/employee", tags=["employee-ai"])
 
 
 @app.get("/")

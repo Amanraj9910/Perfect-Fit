@@ -33,16 +33,51 @@ router = APIRouter()
 # Pydantic Models
 # ============================================
 
+
+# ============================================
+# Pydantic Models
+# ============================================
+
 class TechnicalQuestion(BaseModel):
     question: str = Field(..., min_length=5)
     desired_answer: str = Field(..., min_length=2)
+    id: Optional[str] = None # Optional for creation
+
+class JobResponsibility(BaseModel):
+    content: str = Field(..., min_length=5)
+    importance: str = Field("Medium", pattern="^(Low|Medium|High)$")
+    id: Optional[str] = None
+
+class JobSkill(BaseModel):
+    skill_name: str = Field(..., min_length=1)
+    min_years: int = Field(0, ge=0)
+    is_mandatory: bool = True
+    id: Optional[str] = None
 
 class JobRoleCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     department: str = Field(..., min_length=2, max_length=100)
     description: str = Field(..., min_length=10)
-    requirements: str = Field(..., min_length=10)
+    requirements: str = Field(..., min_length=10) # Keeping for backward compatibility or summary
+    
+    # New Fields
+    employment_type: str = Field(..., min_length=2) # Full-time, Contract, etc.
+    work_mode: str = Field(..., min_length=2) # Remote, Hybrid, On-site
+    location: str = Field(..., min_length=2)
+    salary_min: Optional[float] = None
+    salary_max: Optional[float] = None
+    key_business_objective: Optional[str] = None
+    min_experience: int = Field(0, ge=0)
+    
+    # Assessment Flags
+    is_english_required: bool = False
+    is_coding_required: bool = False
+    is_technical_required: bool = False
+    
+    # Related Data
     technical_questions: List[TechnicalQuestion] = []
+    responsibilities: List[JobResponsibility] = []
+    skills: List[JobSkill] = []
 
 
 class JobRoleUpdate(BaseModel):
@@ -50,7 +85,23 @@ class JobRoleUpdate(BaseModel):
     department: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = Field(None, min_length=10)
     requirements: Optional[str] = Field(None, min_length=10)
+    
+    employment_type: Optional[str] = None
+    work_mode: Optional[str] = None
+    location: Optional[str] = None
+    salary_min: Optional[float] = None
+    salary_max: Optional[float] = None
+    key_business_objective: Optional[str] = None
+    min_experience: Optional[int] = None
+    
+    is_english_required: Optional[bool] = None
+    is_coding_required: Optional[bool] = None
+    is_technical_required: Optional[bool] = None
+
     technical_questions: Optional[List[TechnicalQuestion]] = None
+    responsibilities: Optional[List[JobResponsibility]] = None
+    skills: Optional[List[JobSkill]] = None
+    
     current_version: Optional[int] = Field(None, description="Current version for optimistic locking")
 
 
@@ -60,6 +111,19 @@ class JobRoleResponse(BaseModel):
     department: str
     description: str
     requirements: str
+    
+    # New Fields
+    employment_type: Optional[str] = None
+    work_mode: Optional[str] = None
+    location: Optional[str] = None
+    salary_min: Optional[float] = None
+    salary_max: Optional[float] = None
+    key_business_objective: Optional[str] = None
+    min_experience: Optional[int] = None
+    is_english_required: bool = False
+    is_coding_required: bool = False
+    is_technical_required: bool = False
+    
     status: str
     is_open: bool
     created_by: Optional[str]
@@ -68,7 +132,11 @@ class JobRoleResponse(BaseModel):
     approved_at: Optional[str] = None
     rejection_reason: Optional[str] = None
     version: int = 1
-    technical_questions: Optional[List[TechnicalQuestion]] = None  # For optimistic locking
+    
+    technical_questions: Optional[List[TechnicalQuestion]] = None
+    responsibilities: Optional[List[JobResponsibility]] = None
+    skills: Optional[List[JobSkill]] = None
+
 
 
 class RejectRequest(BaseModel):
@@ -314,13 +382,15 @@ async def get_job(
         
         # Fetch technical questions
         q_result = await supabase.table("technical_assessments").select("*").eq("job_id", job_id).execute()
-        if q_result.data:
-            job["technical_questions"] = [
-                {"id": q["id"], "question": q["question"], "desired_answer": q["desired_answer"]} 
-                for q in q_result.data
-            ]
-        else:
-            job["technical_questions"] = []
+        job["technical_questions"] = q_result.data or []
+
+        # Fetch responsibilities
+        r_result = await supabase.table("job_responsibilities").select("*").eq("job_id", job_id).execute()
+        job["responsibilities"] = r_result.data or []
+
+        # Fetch skills
+        s_result = await supabase.table("job_skills").select("*").eq("job_id", job_id).execute()
+        job["skills"] = s_result.data or []
             
         return job
         

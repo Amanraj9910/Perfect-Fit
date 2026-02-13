@@ -1,0 +1,79 @@
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from openai import AsyncAzureOpenAI
+import os
+
+from dependencies import get_user_with_role
+from core.logging import api_logger, log_error
+
+router = APIRouter()
+
+# Initialize Azure OpenAI Client
+client = AsyncAzureOpenAI(
+    api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+    api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+    azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
+)
+
+DEPLOYMENT_NAME = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
+
+class GenerateRequest(BaseModel):
+    field_name: str = Field(..., description="Field to generate content for (description, responsibilities, requirements)")
+    context: str = Field(..., description="Job Title and basic context")
+    tone: str = "professional"
+
+class GenerateResponse(BaseModel):
+    content: str
+
+async def verify_employee(user: dict = Depends(get_user_with_role)):
+    """Verify user is employee or admin."""
+    if user["role"] not in ["employee", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Employee privileges required"
+        )
+    return user
+
+@router.post("/generate", response_model=GenerateResponse)
+async def generate_content(
+    request: GenerateRequest,
+    user: dict = Depends(verify_employee)
+):
+    """Generate content for job description or responsibilities using AI."""
+    api_logger.info(f"Generating content for {request.field_name} (User: {user['id']})")
+    
+    try:
+        if not os.environ.get("AZURE_OPENAI_API_KEY"):
+             # Mock response if no key (for dev/demo without cost)
+             # return GenerateResponse(content="AI key not configured. This is a placeholder.")
+             raise HTTPException(status_code=500, detail="Azure OpenAI API Key not configured")
+
+        prompt = ""
+        if request.field_name == "description":
+            prompt = f"Write a comprehensive and engaging job description for a '{request.context}'. Keep it professional yet attractive to candidates."
+        elif request.field_name == "responsibilities":
+            prompt = f"List 5-7 key responsibilities for a '{request.context}' role. Return them as a bulleted list."
+        elif request.field_name == "requirements":
+            prompt = f"List key technical and soft skill requirements for a '{request.context}' role."
+        elif request.field_name == "key_business_objective":
+            prompt = f"Write a single sentence describing the key business objective or impact of a '{request.context}' role."
+        else:
+            prompt = f"Write content for '{request.field_name}' for a job titled '{request.context}'."
+
+        response = await client.chat.completions.create(
+            model=DEPLOYMENT_NAME,
+            messages=[
+                {"role": "system", "content": "You are an expert HR copywriter."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        content = response.choices[0].message.content.strip()
+        return GenerateResponse(content=content)
+
+    except Exception as e:
+        log_error(e, context="generate_content")
+        raise HTTPException(status_code=500, detail="Failed to generate content")
