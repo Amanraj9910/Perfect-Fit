@@ -72,8 +72,7 @@ async def generate_content(
                 f"Write a concise, high-impact job description for a '{request.context}' role. "
                 "Limit output to (approx 150 words). "
                 "Focus strictly on the role's core purpose and impact in points. "
-                 "Formate the output as bullet points"
-
+                "Format the output as bullet points. "
                 "Do NOT include sections like 'Key Responsibilities', 'Requirements', 'Benefits', or 'Why Join Us' as these have their own fields."
             )
         elif request.field_name == "responsibilities":
