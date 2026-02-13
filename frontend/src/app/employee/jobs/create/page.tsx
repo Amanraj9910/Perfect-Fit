@@ -176,24 +176,36 @@ export default function CreateJobPage() {
         mutationFn: async ({ field, context }: { field: string, context: string }) => {
             return api.post('/api/employee/generate', { field_name: field, context })
         },
-        onSuccess: (data, variables) => {
+        onSuccess: (data: any, variables) => {
             if (variables.field === 'description') {
                 form.setValue('description', data.content)
             } else if (variables.field === 'key_business_objective') {
                 form.setValue('key_business_objective', data.content)
+            } else if (variables.field === 'technical_questions') {
+                if (data.technical_questions && Array.isArray(data.technical_questions)) {
+                    const newQs = data.technical_questions.map((q: any) => ({
+                        question: q.question,
+                        desired_answer: q.desired_answer
+                    }))
+                    const current = form.getValues('technical_questions') || []
+                    form.setValue('technical_questions', [...current, ...newQs])
+                    toast.success("Generated 5 technical questions")
+                }
             } else if (variables.field === 'responsibilities') {
                 // Parse bullet points
-                const lines = data.content.split('\n').filter((l: string) => l.trim().startsWith('-') || l.trim().match(/^\d+\./))
-                const newResps = lines.map((l: string) => ({
-                    content: l.replace(/^[-*•\d+.]\s*/, '').trim(),
-                    importance: 'Medium'
-                }))
-                if (newResps.length > 0) {
-                    const current = form.getValues('responsibilities')
-                    form.setValue('responsibilities', [...current, ...newResps])
-                } else {
-                    // Fallback if not bulleted
-                    appendResp({ content: data.content, importance: 'Medium' })
+                if (data.content) {
+                    const lines = data.content.split('\n').filter((l: string) => l.trim().startsWith('-') || l.trim().match(/^\d+\./))
+                    const newResps = lines.map((l: string) => ({
+                        content: l.replace(/^[-*•\d+.]\s*/, '').trim(),
+                        importance: 'Medium' as "Medium"
+                    }))
+
+                    if (newResps.length > 0) {
+                        const current = form.getValues('responsibilities') || []
+                        form.setValue('responsibilities', [...current, ...newResps])
+                    } else {
+                        appendResp({ content: data.content, importance: 'Medium' })
+                    }
                 }
             }
         },
@@ -216,6 +228,18 @@ export default function CreateJobPage() {
     }
 
     if (loadingJob) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
+
+    const onInvalid = (errors: any) => {
+        console.error("Form Errors:", errors)
+        const missingFields = Object.keys(errors).join(", ")
+        toast.error(`Please fix errors: ${missingFields}`)
+
+        // Logic to auto-switch to step with error could be added here
+        if (errors.title || errors.department || errors.location) setActiveStep('basics')
+        else if (errors.description) setActiveStep('role')
+        else if (errors.responsibilities) setActiveStep('responsibilities')
+        else if (errors.skills) setActiveStep('skills')
+    }
 
     return (
         <div className="container mx-auto p-6 max-w-5xl">
@@ -256,7 +280,7 @@ export default function CreateJobPage() {
                 {/* Form Content */}
                 <div className="flex-1">
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
 
                             {/* Basics */}
                             <div className={cn("space-y-6", activeStep === 'basics' ? 'block' : 'hidden')}>
@@ -557,48 +581,88 @@ export default function CreateJobPage() {
                                             )} />
                                         </div>
 
-                                        {form.watch('is_technical_required') && (
-                                            <div className="space-y-4 pt-4 border-t">
-                                                <div className="flex items-center justify-between">
-                                                    <h4 className="font-medium">Technical Questions</h4>
-                                                    <Button type="button" size="sm" onClick={() => appendQuestion({ question: "", desired_answer: "" })}>
-                                                        <Plus className="h-4 w-4 mr-1" /> Add Question
-                                                    </Button>
-                                                </div>
-                                                {questionFields.map((field, index) => (
-                                                    <div key={field.id} className="grid gap-2 p-3 bg-muted/20 rounded-lg">
-                                                        <div className="flex gap-2">
+                                    </CardContent>
+                                    <CardFooter className="justify-between">
+                                        <Button type="button" variant="outline" onClick={() => setActiveStep('skills')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                                    </CardFooter>
+                                </Card>
+
+                                {form.watch('is_technical_required') && (
+                                    <Card className="mt-6 border-purple-100 shadow-md">
+                                        <CardHeader className="flex flex-row items-center justify-between bg-purple-50/50 pb-4">
+                                            <div>
+                                                <CardTitle className="text-purple-900">Technical Questions</CardTitle>
+                                                <CardDescription>Define specific questions for the candidate to answer.</CardDescription>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleGenerate('technical_questions')}
+                                                    disabled={!!generating}
+                                                    className="bg-white text-purple-600 border-purple-200 hover:bg-purple-50"
+                                                >
+                                                    {generating === 'technical_questions' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
+                                                    Generate Questions (AI)
+                                                </Button>
+                                                <Button type="button" size="sm" onClick={() => appendQuestion({ question: "", desired_answer: "" })}>
+                                                    <Plus className="h-4 w-4 mr-1" /> Add Question
+                                                </Button>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4 pt-4">
+                                            {questionFields.map((field, index) => (
+                                                <div key={field.id} className="grid gap-3 p-4 bg-muted/20 rounded-lg border">
+                                                    <div className="flex gap-3 items-start">
+                                                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold mt-1">
+                                                            {index + 1}
+                                                        </span>
+                                                        <div className="flex-1 space-y-3">
                                                             <FormField
                                                                 control={form.control}
                                                                 name={`technical_questions.${index}.question`}
                                                                 render={({ field }) => (
-                                                                    <Input {...field} placeholder="Question..." className="flex-1" />
+                                                                    <div className="space-y-1">
+                                                                        <FormLabel className="text-xs text-muted-foreground">Question</FormLabel>
+                                                                        <Input {...field} placeholder="e.g. Explain the difference between..." className="bg-white" />
+                                                                    </div>
                                                                 )}
                                                             />
-                                                            <Button type="button" variant="ghost" size="icon" onClick={() => removeQuestion(index)}>
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
+                                                            <FormField
+                                                                control={form.control}
+                                                                name={`technical_questions.${index}.desired_answer`}
+                                                                render={({ field }) => (
+                                                                    <div className="space-y-1">
+                                                                        <FormLabel className="text-xs text-muted-foreground">Desired Answer / Keywords</FormLabel>
+                                                                        <Textarea {...field} placeholder="Key points to look for..." rows={2} className="bg-white" />
+                                                                    </div>
+                                                                )}
+                                                            />
                                                         </div>
-                                                        <FormField
-                                                            control={form.control}
-                                                            name={`technical_questions.${index}.desired_answer`}
-                                                            render={({ field }) => (
-                                                                <Textarea {...field} placeholder="Desired answer / keywords..." rows={2} />
-                                                            )}
-                                                        />
+                                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeQuestion(index)} className="text-muted-foreground hover:text-destructive -mt-1">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                    <CardFooter className="justify-between">
-                                        <Button type="button" variant="outline" onClick={() => setActiveStep('skills')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-                                        <Button type="submit" disabled={mutation.isPending}>
-                                            {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                            {editId ? 'Update Job Role' : 'Create Job Role'} <Save className="ml-2 h-4 w-4" />
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
+                                                </div>
+                                            ))}
+                                            {questionFields.length === 0 && (
+                                                <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                                                    <Wand2 className="h-8 w-8 mx-auto mb-2 text-purple-300" />
+                                                    <p>No questions added yet.</p>
+                                                    <p className="text-sm">Click "Generate Questions" to get started instantly.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                )}
+
+                                <div className="flex justify-end mt-6">
+                                    <Button type="submit" disabled={mutation.isPending} size="lg">
+                                        {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                        {editId ? 'Update Job Role' : 'Create Job Role'} <Save className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
 
                         </form>

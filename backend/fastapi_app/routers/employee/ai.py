@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from openai import AsyncAzureOpenAI
 import os
 
+from typing import List, Optional, Dict
+
 from dependencies import get_user_with_role
 from core.logging import api_logger, log_error
 
@@ -19,12 +21,13 @@ client = AsyncAzureOpenAI(
 DEPLOYMENT_NAME = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
 
 class GenerateRequest(BaseModel):
-    field_name: str = Field(..., description="Field to generate content for (description, responsibilities, requirements)")
+    field_name: str = Field(..., description="Field to generate content for (description, responsibilities, requirements, technical_questions)")
     context: str = Field(..., description="Job Title and basic context")
     tone: str = "professional"
 
 class GenerateResponse(BaseModel):
     content: str
+    technical_questions: Optional[List[Dict[str, str]]] = None
 
 async def verify_employee(user: dict = Depends(get_user_with_role)):
     """Verify user is employee or admin."""
@@ -50,7 +53,16 @@ async def generate_content(
              raise HTTPException(status_code=500, detail="Azure OpenAI API Key not configured")
 
         prompt = ""
-        if request.field_name == "description":
+        is_json = False
+        
+        if request.field_name == "technical_questions":
+            is_json = True
+            prompt = (
+                f"Generate 5 technical interview questions for a '{request.context}' role. "
+                "Include a desired answer for each. "
+                "Output valid JSON as a list of objects with keys: 'question' and 'desired_answer'."
+            )
+        elif request.field_name == "description":
             prompt = f"Write a comprehensive and engaging job description for a '{request.context}'. Keep it professional yet attractive to candidates."
         elif request.field_name == "responsibilities":
             prompt = f"List 5-7 key responsibilities for a '{request.context}' role. Return them as a bulleted list."
@@ -61,17 +73,42 @@ async def generate_content(
         else:
             prompt = f"Write content for '{request.field_name}' for a job titled '{request.context}'."
 
-        response = await client.chat.completions.create(
-            model=DEPLOYMENT_NAME,
-            messages=[
-                {"role": "system", "content": "You are an expert HR copywriter."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
+        messages = [
+            {"role": "system", "content": "You are an expert HR copywriter." + (" Output valid JSON." if is_json else "")},
+            {"role": "user", "content": prompt}
+        ]
+
+        kwargs = {
+            "model": DEPLOYMENT_NAME,
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0.7
+        }
+        
+        if is_json:
+            kwargs["response_format"] = { "type": "json_object" }
+
+        response = await client.chat.completions.create(**kwargs)
         
         content = response.choices[0].message.content.strip()
+        
+        if is_json:
+            import json
+            try:
+                data = json.loads(content)
+                # Handle if it returns a wrapper object (e.g. {"questions": [...]}) or direct list (though schema usually enforces object root for json_object mode)
+                questions = []
+                if isinstance(data, list):
+                    questions = data
+                elif "questions" in data:
+                    questions = data["questions"]
+                elif "technical_questions" in data:
+                    questions = data["technical_questions"]
+                
+                return GenerateResponse(content="Generated questions", technical_questions=questions)
+            except json.JSONDecodeError:
+                return GenerateResponse(content=content)
+
         return GenerateResponse(content=content)
 
     except Exception as e:

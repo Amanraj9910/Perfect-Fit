@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from dependencies import get_supabase, CustomSupabaseClient, get_user_with_role
 from core.logging import api_logger, log_error
@@ -42,14 +41,20 @@ async def get_dashboard_stats(
         closed = await get_count(is_open=False)
         
         # Recent approvals (approved in last 7 days? - logic can be complex via API, simple fetch for now)
-        recent_activity_res = await supabase.table("approval_requests")\
-            .select("*, job_roles(title)")\
-            .eq("job_roles.created_by", user["id"])\
-            .order("updated_at", desc=True)\
-            .limit(5)\
-            .execute()
-            # Note: Join query syntax might need adjustment depending on relationship name. 
-            # Assuming 'job_roles' is the FK relation name. If fail, we just return empty.
+        # Fetch jobs created by user first to avoid complex join filtering issues
+        jobs_res = await supabase.table("job_roles").select("id").eq("created_by", user["id"]).execute()
+        job_ids = [j["id"] for j in jobs_res.data]
+        
+        recent_activity = []
+        if job_ids:
+            # FIXED: Changed from 'updated_at' to 'created_at' based on database schema
+            recent_activity_res = await supabase.table("approval_requests")\
+                .select("*, job_roles(title)")\
+                .in_("job_id", job_ids)\
+                .order("created_at", desc=True)\
+                .limit(5)\
+                .execute()
+            recent_activity = recent_activity_res.data
 
         return {
             "total_jobs": total,
@@ -57,7 +62,7 @@ async def get_dashboard_stats(
             "approved_jobs": approved,
             "rejected_jobs": rejected,
             "closed_jobs": closed,
-            "recent_activity": [] # Placeholder if join fails, simple counts are main req.
+            "recent_activity": recent_activity
         }
 
     except Exception as e:
