@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -34,7 +33,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 // Zod Schema
 const jobFormSchema = z.object({
@@ -71,18 +69,10 @@ const jobFormSchema = z.object({
         desired_answer: z.string().min(2)
     })).optional(),
 
-    requirements: z.string().min(10, "Requirements are required") // Keeping for legacy/summary
+    requirements: z.string().optional() // Requirements summary is optional now, generated or legacy
 })
 
 type JobFormValues = z.infer<typeof jobFormSchema>
-
-const steps = [
-    { id: 'basics', title: 'Basic Details' },
-    { id: 'role', title: 'Role Overview' },
-    { id: 'responsibilities', title: 'Responsibilities' },
-    { id: 'skills', title: 'Skills & Exp' },
-    { id: 'assessment', title: 'Assessments' }
-]
 
 export default function CreateJobPage() {
     const router = useRouter()
@@ -112,9 +102,21 @@ export default function CreateJobPage() {
             is_coding_required: false,
             is_technical_required: false,
             technical_questions: [],
-            requirements: 'To be populated from skills...'
+            requirements: ''
         }
     })
+
+    // Watch technical requirement to dynamically update steps
+    const isTechnicalRequired = form.watch('is_technical_required')
+
+    // Define steps inside component to react to state
+    const steps = [
+        { id: 'basics', title: 'Basic Details' },
+        { id: 'role', title: 'Role Overview' },
+        { id: 'responsibilities', title: 'Responsibilities' },
+        { id: 'skills', title: 'Skills & Assessments' }, // Renamed
+        ...(isTechnicalRequired ? [{ id: 'technical', title: 'Technical Questions' }] : []) // Conditional Step
+    ]
 
     // Fetch existing job if editing
     const { data: existingJob, isLoading: loadingJob } = useQuery({
@@ -130,7 +132,6 @@ export default function CreateJobPage() {
                 ...existingJob,
                 salary_min: existingJob.salary_min || 0,
                 salary_max: existingJob.salary_max || 0,
-                // Ensure arrays are initialized
                 responsibilities: existingJob.responsibilities || [],
                 skills: existingJob.skills || [],
                 technical_questions: existingJob.technical_questions || []
@@ -157,6 +158,8 @@ export default function CreateJobPage() {
     // Mutations
     const mutation = useMutation({
         mutationFn: async (data: JobFormValues) => {
+            // Ensure generated summary if empty? Or backend handles it.
+            // Just pass data
             if (editId) {
                 return api.patch(`/api/employee/jobs/${editId}`, data)
             } else {
@@ -192,7 +195,6 @@ export default function CreateJobPage() {
                     toast.success("Generated 5 technical questions")
                 }
             } else if (variables.field === 'responsibilities') {
-                // Parse bullet points
                 if (data.content) {
                     const lines = data.content.split('\n').filter((l: string) => l.trim().startsWith('-') || l.trim().match(/^\d+\./))
                     const newResps = lines.map((l: string) => ({
@@ -207,19 +209,27 @@ export default function CreateJobPage() {
                         appendResp({ content: data.content, importance: 'Medium' })
                     }
                 }
+            } else if (variables.field === 'requirements') {
+                form.setValue('requirements', data.content)
             }
         },
         onError: () => toast.error("Failed to generate content")
     })
 
-    const handleGenerate = async (field: string) => {
+    const handleGenerate = async (field: string, extraContext?: string) => {
         const title = form.getValues('title')
         if (!title) {
             toast.error("Please enter a Job Title first")
             return
         }
         setGenerating(field)
-        await aiMutation.mutateAsync({ field, context: title })
+        // Check if we need to append extra context
+        let contextToSend = title;
+        if (field === 'technical_questions' && extraContext) {
+            contextToSend = `${title} | ${extraContext}`
+        }
+
+        await aiMutation.mutateAsync({ field, context: contextToSend })
         setGenerating(null)
     }
 
@@ -234,11 +244,11 @@ export default function CreateJobPage() {
         const missingFields = Object.keys(errors).join(", ")
         toast.error(`Please fix errors: ${missingFields}`)
 
-        // Logic to auto-switch to step with error could be added here
         if (errors.title || errors.department || errors.location) setActiveStep('basics')
         else if (errors.description) setActiveStep('role')
         else if (errors.responsibilities) setActiveStep('responsibilities')
-        else if (errors.skills) setActiveStep('skills')
+        else if (errors.skills || errors.is_technical_required) setActiveStep('skills')
+        else if (errors.technical_questions) setActiveStep('technical')
     }
 
     return (
@@ -258,7 +268,7 @@ export default function CreateJobPage() {
                 <div className="w-64 shrink-0 hidden md:block">
                     <Card>
                         <CardContent className="p-4 space-y-1">
-                            {steps.map((step, idx) => (
+                            {steps.map((step) => (
                                 <button
                                     key={step.id}
                                     onClick={() => setActiveStep(step.id)}
@@ -365,19 +375,12 @@ export default function CreateJobPage() {
                                             <FormItem>
                                                 <div className="flex justify-between items-center">
                                                     <FormLabel>Key Business Objective</FormLabel>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-purple-600"
-                                                        onClick={() => handleGenerate('key_business_objective')}
-                                                        disabled={!!generating}
-                                                    >
+                                                    <Button type="button" variant="ghost" size="sm" className="text-purple-600" onClick={() => handleGenerate('key_business_objective')} disabled={!!generating}>
                                                         {generating === 'key_business_objective' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
                                                         Generate with AI
                                                     </Button>
                                                 </div>
-                                                <FormControl><Input {...field} placeholder="e.g. Drive revenue growth through strategic sales initiatives..." /></FormControl>
+                                                <FormControl><Input {...field} placeholder="e.g. Drive revenue growth..." /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
@@ -385,14 +388,7 @@ export default function CreateJobPage() {
                                             <FormItem>
                                                 <div className="flex justify-between items-center">
                                                     <FormLabel>Role Description *</FormLabel>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-purple-600"
-                                                        onClick={() => handleGenerate('description')}
-                                                        disabled={!!generating}
-                                                    >
+                                                    <Button type="button" variant="ghost" size="sm" className="text-purple-600" onClick={() => handleGenerate('description')} disabled={!!generating}>
                                                         {generating === 'description' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
                                                         Generate with AI
                                                     </Button>
@@ -415,14 +411,7 @@ export default function CreateJobPage() {
                                     <CardHeader className="flex flex-row items-center justify-between">
                                         <CardTitle>Responsibilities</CardTitle>
                                         <div className="flex gap-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleGenerate('responsibilities')}
-                                                disabled={!!generating}
-                                                className="text-purple-600 border-purple-200 hover:bg-purple-50"
-                                            >
+                                            <Button type="button" variant="outline" size="sm" onClick={() => handleGenerate('responsibilities')} disabled={!!generating} className="text-purple-600 border-purple-200 hover:bg-purple-50">
                                                 {generating === 'responsibilities' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
                                                 Suggest Responsibilities
                                             </Button>
@@ -435,29 +424,21 @@ export default function CreateJobPage() {
                                         {respFields.map((field, index) => (
                                             <div key={field.id} className="flex gap-4 items-start p-3 bg-muted/20 rounded-lg group">
                                                 <div className="flex-1 space-y-2">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`responsibilities.${index}.content`}
-                                                        render={({ field }) => (
-                                                            <Input {...field} placeholder="Responsibility detail..." />
-                                                        )}
-                                                    />
+                                                    <FormField control={form.control} name={`responsibilities.${index}.content`} render={({ field }) => (
+                                                        <Input {...field} placeholder="Responsibility detail..." />
+                                                    )} />
                                                 </div>
                                                 <div className="w-32">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`responsibilities.${index}.importance`}
-                                                        render={({ field }) => (
-                                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="Low">Low</SelectItem>
-                                                                    <SelectItem value="Medium">Medium</SelectItem>
-                                                                    <SelectItem value="High">High</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        )}
-                                                    />
+                                                    <FormField control={form.control} name={`responsibilities.${index}.importance`} render={({ field }) => (
+                                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="Low">Low</SelectItem>
+                                                                <SelectItem value="Medium">Medium</SelectItem>
+                                                                <SelectItem value="High">High</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    )} />
                                                 </div>
                                                 <Button type="button" variant="ghost" size="icon" onClick={() => removeResp(index)} className="text-muted-foreground hover:text-destructive">
                                                     <Trash2 className="h-4 w-4" />
@@ -473,7 +454,7 @@ export default function CreateJobPage() {
                                 </Card>
                             </div>
 
-                            {/* Skills */}
+                            {/* Skills & Assessments */}
                             <div className={cn("space-y-6", activeStep === 'skills' ? 'block' : 'hidden')}>
                                 <Card>
                                     <CardHeader className="flex flex-row items-center justify-between">
@@ -496,31 +477,19 @@ export default function CreateJobPage() {
                                             {skillFields.map((field, index) => (
                                                 <div key={field.id} className="flex gap-4 items-center p-3 bg-muted/20 rounded-lg">
                                                     <div className="flex-1">
-                                                        <FormField
-                                                            control={form.control}
-                                                            name={`skills.${index}.skill_name`}
-                                                            render={({ field }) => (
-                                                                <Input {...field} placeholder="Skill name (e.g. React.js)" />
-                                                            )}
-                                                        />
+                                                        <FormField control={form.control} name={`skills.${index}.skill_name`} render={({ field }) => (
+                                                            <Input {...field} placeholder="Skill name (e.g. React.js)" />
+                                                        )} />
                                                     </div>
                                                     <div className="w-24">
-                                                        <FormField
-                                                            control={form.control}
-                                                            name={`skills.${index}.min_years`}
-                                                            render={({ field }) => (
-                                                                <Input type="number" {...field} placeholder="Years" />
-                                                            )}
-                                                        />
+                                                        <FormField control={form.control} name={`skills.${index}.min_years`} render={({ field }) => (
+                                                            <Input type="number" {...field} placeholder="Years" />
+                                                        )} />
                                                     </div>
                                                     <div className="flex items-center space-x-2">
-                                                        <FormField
-                                                            control={form.control}
-                                                            name={`skills.${index}.is_mandatory`}
-                                                            render={({ field }) => (
-                                                                <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                                            )}
-                                                        />
+                                                        <FormField control={form.control} name={`skills.${index}.is_mandatory`} render={({ field }) => (
+                                                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                        )} />
                                                         <span className="text-sm">Mandatory</span>
                                                     </div>
                                                     <Button type="button" variant="ghost" size="icon" onClick={() => removeSkill(index)} className="text-muted-foreground hover:text-destructive">
@@ -531,83 +500,109 @@ export default function CreateJobPage() {
                                             {skillFields.length === 0 && <p className="text-center text-muted-foreground py-4">No specific skills added yet.</p>}
                                         </div>
 
-                                        {/* Requirements Summary Field (Hidden or Readonly if auto-gen, but let's allow edit) */}
                                         <FormField control={form.control} name="requirements" render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Requirements Summary</FormLabel>
-                                                <FormControl><Textarea {...field} placeholder="Summary of requirements..." /></FormControl>
-                                                <FormDescription>This field is used for legacy compatibility and summary views.</FormDescription>
+                                                <div className="flex justify-between items-center">
+                                                    <FormLabel>Requirements Summary</FormLabel>
+                                                    <Button type="button" variant="ghost" size="sm" className="text-purple-600" onClick={() => handleGenerate('requirements')} disabled={!!generating}>
+                                                        {generating === 'requirements' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
+                                                        Generate with AI
+                                                    </Button>
+                                                </div>
+                                                <FormControl><Textarea {...field} placeholder="Summary of requirements..." rows={5} /></FormControl>
                                             </FormItem>
                                         )} />
+
+                                        <div className="pt-6 border-t mt-6">
+                                            <h4 className="text-lg font-medium mb-4">Assessment Settings</h4>
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50">
+                                                    <div>
+                                                        <h4 className="font-medium">English Assessment</h4>
+                                                        <p className="text-sm text-muted-foreground">Require candidates to pass an English proficiency test.</p>
+                                                    </div>
+                                                    <FormField control={form.control} name="is_english_required" render={({ field }) => (
+                                                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                    )} />
+                                                </div>
+                                                <div className="flex items-center justify-between p-4 border rounded-lg bg-slate-50">
+                                                    <div>
+                                                        <h4 className="font-medium">Coding Test</h4>
+                                                        <p className="text-sm text-muted-foreground">Require candidates to pass a practical coding challenge.</p>
+                                                    </div>
+                                                    <FormField control={form.control} name="is_coding_required" render={({ field }) => (
+                                                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                    )} />
+                                                </div>
+                                                <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50 border-blue-100">
+                                                    <div>
+                                                        <h4 className="font-medium text-blue-900">Technical Assessment</h4>
+                                                        <p className="text-sm text-blue-700">Require custom technical questions. Enabling this adds a new step.</p>
+                                                    </div>
+                                                    <FormField control={form.control} name="is_technical_required" render={({ field }) => (
+                                                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                                    )} />
+                                                </div>
+                                            </div>
+                                        </div>
 
                                     </CardContent>
                                     <CardFooter className="justify-between">
                                         <Button type="button" variant="outline" onClick={() => setActiveStep('responsibilities')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-                                        <Button type="button" onClick={() => setActiveStep('assessment')}>Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
+
+                                        {/* If Technical is required, show Next; otherwise show Save */}
+                                        {isTechnicalRequired ? (
+                                            <Button type="button" onClick={() => setActiveStep('technical')}>Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                                        ) : (
+                                            <Button type="submit" disabled={mutation.isPending}>
+                                                {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                                {editId ? 'Update Job Role' : 'Create Job Role'} <Save className="ml-2 h-4 w-4" />
+                                            </Button>
+                                        )}
                                     </CardFooter>
                                 </Card>
                             </div>
 
-                            {/* Assessments */}
-                            <div className={cn("space-y-6", activeStep === 'assessment' ? 'block' : 'hidden')}>
-                                <Card>
-                                    <CardHeader><CardTitle>Assessment Settings</CardTitle></CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div className="flex items-center justify-between p-4 border rounded-lg">
-                                            <div>
-                                                <h4 className="font-medium">English Assessment</h4>
-                                                <p className="text-sm text-muted-foreground">Require candidates to pass an English proficiency test.</p>
+                            {/* Technical Questions (Conditional) */}
+                            {isTechnicalRequired && (
+                                <div className={cn("space-y-6", activeStep === 'technical' ? 'block' : 'hidden')}>
+                                    <Card className="border-purple-100 shadow-md">
+                                        <CardHeader className="flex flex-col gap-4 bg-purple-50/50 pb-4">
+                                            <div className="flex flex-row items-center justify-between w-full">
+                                                <div>
+                                                    <CardTitle className="text-purple-900">Technical Questions</CardTitle>
+                                                    <CardDescription>Define specific questions for the candidate to answer.</CardDescription>
+                                                </div>
                                             </div>
-                                            <FormField control={form.control} name="is_english_required" render={({ field }) => (
-                                                <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                            )} />
-                                        </div>
-                                        <div className="flex items-center justify-between p-4 border rounded-lg">
-                                            <div>
-                                                <h4 className="font-medium">Coding Test</h4>
-                                                <p className="text-sm text-muted-foreground">Require candidates to pass a practical coding challenge.</p>
-                                            </div>
-                                            <FormField control={form.control} name="is_coding_required" render={({ field }) => (
-                                                <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                            )} />
-                                        </div>
-                                        <div className="flex items-center justify-between p-4 border rounded-lg">
-                                            <div>
-                                                <h4 className="font-medium">Technical Assessment</h4>
-                                                <p className="text-sm text-muted-foreground">Require custom technical questions (defined below).</p>
-                                            </div>
-                                            <FormField control={form.control} name="is_technical_required" render={({ field }) => (
-                                                <Switch checked={field.value} onCheckedChange={field.onChange} />
-                                            )} />
-                                        </div>
 
-                                    </CardContent>
-                                    <CardFooter className="justify-between">
-                                        <Button type="button" variant="outline" onClick={() => setActiveStep('skills')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-                                    </CardFooter>
-                                </Card>
-
-                                {form.watch('is_technical_required') && (
-                                    <Card className="mt-6 border-purple-100 shadow-md">
-                                        <CardHeader className="flex flex-row items-center justify-between bg-purple-50/50 pb-4">
-                                            <div>
-                                                <CardTitle className="text-purple-900">Technical Questions</CardTitle>
-                                                <CardDescription>Define specific questions for the candidate to answer.</CardDescription>
-                                            </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex items-end gap-3 bg-white p-3 rounded-md border border-purple-100">
+                                                <div className="flex-1 space-y-1">
+                                                    <label className="text-xs font-medium text-muted-foreground">AI Generation Focus (Optional)</label>
+                                                    <Input
+                                                        id="tech-focus"
+                                                        placeholder="e.g. 'Advanced Async/Await', 'System Design', 'React Hooks'"
+                                                        className="h-9"
+                                                    />
+                                                </div>
                                                 <Button
                                                     type="button"
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => handleGenerate('technical_questions')}
+                                                    onClick={() => {
+                                                        const focusInput = document.getElementById('tech-focus') as HTMLInputElement;
+                                                        handleGenerate('technical_questions', focusInput?.value || '');
+                                                    }}
                                                     disabled={!!generating}
-                                                    className="bg-white text-purple-600 border-purple-200 hover:bg-purple-50"
+                                                    className="bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100 h-9"
                                                 >
                                                     {generating === 'technical_questions' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
-                                                    Generate Questions (AI)
+                                                    Generate Questions
                                                 </Button>
+                                            </div>
+
+                                            <div className="flex justify-end pt-2">
                                                 <Button type="button" size="sm" onClick={() => appendQuestion({ question: "", desired_answer: "" })}>
-                                                    <Plus className="h-4 w-4 mr-1" /> Add Question
+                                                    <Plus className="h-4 w-4 mr-1" /> Add Manual Question
                                                 </Button>
                                             </div>
                                         </CardHeader>
@@ -619,26 +614,18 @@ export default function CreateJobPage() {
                                                             {index + 1}
                                                         </span>
                                                         <div className="flex-1 space-y-3">
-                                                            <FormField
-                                                                control={form.control}
-                                                                name={`technical_questions.${index}.question`}
-                                                                render={({ field }) => (
-                                                                    <div className="space-y-1">
-                                                                        <FormLabel className="text-xs text-muted-foreground">Question</FormLabel>
-                                                                        <Input {...field} placeholder="e.g. Explain the difference between..." className="bg-white" />
-                                                                    </div>
-                                                                )}
-                                                            />
-                                                            <FormField
-                                                                control={form.control}
-                                                                name={`technical_questions.${index}.desired_answer`}
-                                                                render={({ field }) => (
-                                                                    <div className="space-y-1">
-                                                                        <FormLabel className="text-xs text-muted-foreground">Desired Answer / Keywords</FormLabel>
-                                                                        <Textarea {...field} placeholder="Key points to look for..." rows={2} className="bg-white" />
-                                                                    </div>
-                                                                )}
-                                                            />
+                                                            <FormField control={form.control} name={`technical_questions.${index}.question`} render={({ field }) => (
+                                                                <div className="space-y-1">
+                                                                    <FormLabel className="text-xs text-muted-foreground">Question</FormLabel>
+                                                                    <Input {...field} placeholder="e.g. Explain the difference between..." className="bg-white" />
+                                                                </div>
+                                                            )} />
+                                                            <FormField control={form.control} name={`technical_questions.${index}.desired_answer`} render={({ field }) => (
+                                                                <div className="space-y-1">
+                                                                    <FormLabel className="text-xs text-muted-foreground">Desired Answer / Keywords</FormLabel>
+                                                                    <Textarea {...field} placeholder="Key points to look for..." rows={2} className="bg-white" />
+                                                                </div>
+                                                            )} />
                                                         </div>
                                                         <Button type="button" variant="ghost" size="icon" onClick={() => removeQuestion(index)} className="text-muted-foreground hover:text-destructive -mt-1">
                                                             <Trash2 className="h-4 w-4" />
@@ -654,16 +641,16 @@ export default function CreateJobPage() {
                                                 </div>
                                             )}
                                         </CardContent>
+                                        <CardFooter className="justify-between bg-purple-50/20">
+                                            <Button type="button" variant="ghost" onClick={() => setActiveStep('skills')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                                            <Button type="submit" disabled={mutation.isPending} size="lg">
+                                                {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                                {editId ? 'Update Job Role' : 'Create Job Role'} <Save className="ml-2 h-4 w-4" />
+                                            </Button>
+                                        </CardFooter>
                                     </Card>
-                                )}
-
-                                <div className="flex justify-end mt-6">
-                                    <Button type="submit" disabled={mutation.isPending} size="lg">
-                                        {mutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                        {editId ? 'Update Job Role' : 'Create Job Role'} <Save className="ml-2 h-4 w-4" />
-                                    </Button>
                                 </div>
-                            </div>
+                            )}
 
                         </form>
                     </Form>

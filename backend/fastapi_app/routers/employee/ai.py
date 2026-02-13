@@ -57,17 +57,32 @@ async def generate_content(
         
         if request.field_name == "technical_questions":
             is_json = True
+            # Check if there's specific instruction in context (e.g. "Title: .NET Developer | Focus: Async")
+            job_title = request.context.split('|')[0].strip() if '|' in request.context else request.context
+            focus_area = request.context.split('|')[1].strip() if '|' in request.context else ""
+            
             prompt = (
-                f"Generate 5 technical interview questions for a '{request.context}' role. "
+                f"Generate 5 technical interview questions for a '{job_title}' role."
+                f"{f' Focus specifically on: {focus_area}. ' if focus_area else ''}"
                 "Include a desired answer for each. "
                 "Output valid JSON as a list of objects with keys: 'question' and 'desired_answer'."
             )
         elif request.field_name == "description":
-            prompt = f"Write a comprehensive and engaging job description for a '{request.context}, Just a small Description.'. Keep it professional yet attractive to candidates."
+            prompt = (
+                f"Write a concise, high-impact job description for a '{request.context}' role. "
+                "Limit output to (approx 150 words). "
+                "Focus strictly on the role's core purpose and impact in points. "
+                 "Formate the output as bullet points"
+
+                "Do NOT include sections like 'Key Responsibilities', 'Requirements', 'Benefits', or 'Why Join Us' as these have their own fields."
+            )
         elif request.field_name == "responsibilities":
             prompt = f"List 5-7 key responsibilities for a '{request.context}' role. Return them as a bulleted list."
         elif request.field_name == "requirements":
-            prompt = f"List key technical and soft skill requirements for a '{request.context}' role."
+            prompt = (
+                f"List the top 5-7 essential technical and soft skill requirements for a '{request.context}' role. "
+                "Return them as a concise bulleted list."
+            )
         elif request.field_name == "key_business_objective":
             prompt = f"Write a single sentence describing the key business objective or impact of a '{request.context}' role."
         else:
