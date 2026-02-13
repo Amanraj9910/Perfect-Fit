@@ -2,7 +2,7 @@
 
 import AdminApplicationsList from '@/components/admin/AdminApplicationsList'
 
-export default function AdminApplicationsPage() {
+export default function HRApplicationsPage() {
     return (
         <div className="space-y-6">
             <AdminApplicationsList />

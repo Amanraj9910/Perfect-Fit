@@ -210,6 +210,16 @@ async def create_job(
             "department": job.department,
             "description": job.description,
             "requirements": job.requirements,
+            "employment_type": job.employment_type,
+            "work_mode": job.work_mode,
+            "location": job.location,
+            "salary_min": job.salary_min,
+            "salary_max": job.salary_max,
+            "key_business_objective": job.key_business_objective,
+            "min_experience": job.min_experience,
+            "is_english_required": job.is_english_required,
+            "is_coding_required": job.is_coding_required,
+            "is_technical_required": job.is_technical_required,
             "created_by": user["id"],
             "status": "pending",
             "is_open": True,
@@ -237,6 +247,31 @@ async def create_job(
                 for q in job.technical_questions
             ]
             await supabase.table("technical_assessments").insert(questions_data).execute()
+
+        # Insert responsibilities if any
+        if job.responsibilities:
+            resp_data = [
+                {
+                    "job_id": job_id,
+                    "content": r.content,
+                    "importance": r.importance
+                }
+                for r in job.responsibilities
+            ]
+            await supabase.table("job_responsibilities").insert(resp_data).execute()
+
+        # Insert skills if any
+        if job.skills:
+            skills_data = [
+                {
+                    "job_id": job_id,
+                    "skill_name": s.skill_name,
+                    "min_years": s.min_years,
+                    "is_mandatory": s.is_mandatory
+                }
+                for s in job.skills
+            ]
+            await supabase.table("job_skills").insert(skills_data).execute()
             
         db_logger.info(f"Job role created: {job_id}")
         
@@ -270,20 +305,24 @@ async def list_jobs(
     api_logger.info(f"Listing jobs for user: {user['id']} (role: {user['role']})")
     
     # Check permissions
-    if user["role"] not in ["employee", "admin", "hr"]:
+    if user["role"] not in ["employee", "admin", "hr", "recruiter"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Employee, HR, or Admin privileges required"
         )
     
     try:
-        query = supabase.table("job_roles").select("*")
+        # Select all fields plus profile full_name using explicit FK
+        query = supabase.table("job_roles").select("*, creator:profiles!job_roles_created_by_fkey(full_name)")
         
         # Employees see only their own jobs, admins see all
         if user["role"] == "employee":
             query = query.eq("created_by", user["id"])
         
         result = await query.order("created_at", desc=True).execute()
+        
+        # Flatten profile name if needed or let frontend handle it
+        # Supabase returns nested object: { ..., profiles: { full_name: "..." } }
         
         db_logger.debug(f"Listed {len(result.data)} jobs")
         return result.data or []
@@ -305,8 +344,10 @@ async def list_pending_jobs(
     api_logger.info(f"Listing pending jobs for: {user['id']}")
     
     try:
+        # Fetch status=pending, include creator name, skills, and responsibilities for detail view
+        # We can fetch everything here since the volume of PENDING jobs is usually manageable
         result = await supabase.table("job_roles")\
-            .select("*")\
+            .select("*, creator:profiles!job_roles_created_by_fkey(full_name), approver:profiles!job_roles_approved_by_fkey(full_name), job_skills(*), job_responsibilities(*)")\
             .eq("status", "pending")\
             .order("created_at", desc=True)\
             .execute()

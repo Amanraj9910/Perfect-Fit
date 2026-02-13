@@ -245,7 +245,26 @@ export interface JobRole {
     approved_at?: string
     rejection_reason?: string
     version: number  // For optimistic locking
-    technical_questions?: TechnicalQuestion[]
+
+    // New Fields
+    employment_type?: string
+    work_mode?: string
+    location?: string
+    salary_min?: number
+    salary_max?: number
+    key_business_objective?: string
+    min_experience?: number
+    is_english_required?: boolean
+    is_coding_required?: boolean
+    is_technical_required?: boolean
+
+    // Relations
+    technical_questions?: TechnicalQuestion[];
+    job_responsibilities?: { id: string; content: string; importance: string }[];
+    job_skills?: { id: string; skill_name: string; min_years: number; is_mandatory: boolean }[];
+    creator?: { full_name: string };
+    approver?: { full_name: string };
+    profiles?: { full_name: string }; // Keep for backward compatibility if needed
 }
 
 export interface ApplicationInput {

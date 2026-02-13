@@ -63,7 +63,7 @@ async def generate_content(
                 "Output valid JSON as a list of objects with keys: 'question' and 'desired_answer'."
             )
         elif request.field_name == "description":
-            prompt = f"Write a comprehensive and engaging job description for a '{request.context}'. Keep it professional yet attractive to candidates."
+            prompt = f"Write a comprehensive and engaging job description for a '{request.context}, Just a small Description.'. Keep it professional yet attractive to candidates."
         elif request.field_name == "responsibilities":
             prompt = f"List 5-7 key responsibilities for a '{request.context}' role. Return them as a bulleted list."
         elif request.field_name == "requirements":
