@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             console.log('[Auth] Profile fetched successfully:', data?.full_name)
             return data as Profile
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Auth] Exception in fetchProfile:', err)
             return null
         }
@@ -77,35 +77,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     useEffect(() => {
+        let isMounted = true;
+
         // Get initial session and user securely
         const initAuth = async () => {
             console.log('[Auth] initAuth starting...')
+
+            // Timeout promise to prevent infinite loading
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Auth initialization timed out')), 5000)
+            )
+
             try {
-                const { data: { session } } = await supabase.auth.getSession()
-                setSession(session)
+                // Race between the actual auth logic and the timeout
+                await Promise.race([
+                    (async () => {
+                        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                        if (sessionError) throw sessionError;
 
-                // Use getUser() to get the user object securely to avoid warning
-                const { data: { user } } = await supabase.auth.getUser()
-                console.log('[Auth] initAuth got user:', user?.id)
-                setUser(user)
+                        if (!isMounted) return;
+                        setSession(session)
 
-                if (user) {
-                    try {
-                        const profileData = await fetchProfile(user.id)
-                        setProfile(profileData)
-                        console.log('[Auth] initAuth profile set:', profileData?.full_name)
-                    } catch (err) {
-                        console.error('[Auth] Profile fetch failed in initAuth:', err)
-                    }
-                }
-            } catch (e) {
-                console.error('[Auth] Auth initialization failed:', e)
+                        // Use getUser() to get the user object securely to avoid warning
+                        const { data: { user }, error: userError } = await supabase.auth.getUser()
+                        if (userError) throw userError;
+
+                        if (!isMounted) return;
+                        console.log('[Auth] initAuth got user:', user?.id)
+                        setUser(user)
+
+                        if (user) {
+                            try {
+                                const profileData = await fetchProfile(user.id)
+                                if (!isMounted) return;
+                                setProfile(profileData)
+                                console.log('[Auth] initAuth profile set:', profileData?.full_name)
+                            } catch (err: any) {
+                                console.error('[Auth] Profile fetch failed in initAuth:', err)
+                                // If profile fetch fails, we might still want to let them be "logged in" 
+                                // but without a profile, OR force logout. 
+                                // For now, we'll keep them logged in but log the error.
+                            }
+                        }
+                    })(),
+                    timeoutPromise
+                ])
+            } catch (e: any) {
+                if (!isMounted) return;
+                console.error('[Auth] Auth initialization failed or timed out:', e)
+
+                // CRITICAL: If initialization fails (especially due to timeout), 
+                // we must assume the state is invalid and clear everything.
+                // This fixes the issue where old/bad cookies cause a hang.
+                console.log('[Auth] Forcing sign out due to initialization failure')
+
+                // Clear state immediately
+                setSession(null)
+                setUser(null)
+                setProfile(null)
+
+                // Force Supabase to clear its storage/cookies
+                // We use catch() here to ensure we don't break the finally block if this throws
+                await supabase.auth.signOut().catch((err: any) =>
+                    console.warn('[Auth] Error clearing supabase session:', err)
+                )
+
+                toast.error("Session expired or invalid. Please log in again.")
             } finally {
                 // CRITICAL: Always set both loading and profileLoaded in finally
                 // This ensures UI is never stuck in loading state
-                setProfileLoaded(true)
-                setLoading(false)
-                console.log('[Auth] initAuth complete - loading=false, profileLoaded=true')
+                if (isMounted) {
+                    setProfileLoaded(true)
+                    setLoading(false)
+                    console.log('[Auth] initAuth complete - loading=false, profileLoaded=true')
+                }
             }
         }
 
@@ -120,6 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     return
                 }
 
+                if (!isMounted) return;
+
                 console.log('[Auth] onAuthStateChange:', _event)
 
                 try {
@@ -127,15 +174,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                     if (newSession) {
                         const { data: { user } } = await supabase.auth.getUser()
+                        if (!isMounted) return;
                         setUser(user)
                         if (user) {
                             try {
                                 const profileData = await fetchProfile(user.id)
+                                if (!isMounted) return;
                                 setProfile(profileData)
-                            } catch (err) {
+                            } catch (err: any) {
                                 console.error('[Auth] Profile fetch failed in auth change:', err)
                             }
                         } else {
+                            if (!isMounted) return;
                             setProfile(null)
                         }
                     } else {
@@ -143,18 +193,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setProfile(null)
                         setProfileLoaded(true)
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.error('[Auth] Auth change handler failed:', e)
                 } finally {
                     // Only update loading states if they haven't been set yet
                     // This prevents navbar flicker on subsequent auth events
-                    setProfileLoaded(true)
-                    setLoading(false)
+                    if (isMounted) {
+                        setProfileLoaded(true)
+                        setLoading(false)
+                    }
                 }
             }
         )
 
-        return () => subscription.unsubscribe()
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe()
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
@@ -275,13 +330,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileLoaded(true)
 
         try {
+            // Attempt Supabase sign out
             const { error } = await supabase.auth.signOut()
             if (error) {
                 console.warn('[Auth] signOut API warning (may be already signed out):', error.message)
             }
         } catch (error) {
             console.error('[Auth] Error during signOut API call:', error)
-            // State is already cleared, so user can proceed
+        } finally {
+            // CRITICAL: Manually clear Supabase tokens from localStorage
+            // This prevents "resurrection" of the session if the API call fails or if the client
+            // holds onto the token in storage despite the signOut call.
+            if (typeof window !== 'undefined') {
+                console.log('[Auth] Manually clearing localStorage items')
+                const keysToRemove = []
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i)
+                    if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+                        keysToRemove.push(key)
+                    }
+                }
+                keysToRemove.forEach(key => localStorage.removeItem(key))
+            }
         }
     }, [])
 

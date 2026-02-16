@@ -73,6 +73,7 @@ class JobRoleCreate(BaseModel):
     is_english_required: bool = False
     is_coding_required: bool = False
     is_technical_required: bool = False
+    assessment_duration: int = Field(15, ge=5, le=180) # Duration in minutes
     
     # Related Data
     technical_questions: List[TechnicalQuestion] = []
@@ -97,6 +98,7 @@ class JobRoleUpdate(BaseModel):
     is_english_required: Optional[bool] = None
     is_coding_required: Optional[bool] = None
     is_technical_required: Optional[bool] = None
+    assessment_duration: Optional[int] = Field(None, ge=5, le=180)
 
     technical_questions: Optional[List[TechnicalQuestion]] = None
     responsibilities: Optional[List[JobResponsibility]] = None
@@ -123,6 +125,7 @@ class JobRoleResponse(BaseModel):
     is_english_required: bool = False
     is_coding_required: bool = False
     is_technical_required: bool = False
+    assessment_duration: int = 15
     
     status: str
     is_open: bool
@@ -220,6 +223,7 @@ async def create_job(
             "is_english_required": job.is_english_required,
             "is_coding_required": job.is_coding_required,
             "is_technical_required": job.is_technical_required,
+            "assessment_duration": job.assessment_duration,
             "created_by": user["id"],
             "status": "pending",
             "is_open": True,
@@ -372,7 +376,7 @@ async def list_public_jobs(
     
     try:
         result = await supabase.table("job_roles")\
-            .select("id, title, department, description, requirements, created_at")\
+            .select("*, job_skills(*), job_responsibilities(*)")\
             .eq("status", "approved")\
             .eq("is_open", True)\
             .order("created_at", desc=True)\

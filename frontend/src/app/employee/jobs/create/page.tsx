@@ -63,6 +63,7 @@ const jobFormSchema = z.object({
     is_english_required: z.boolean().default(false),
     is_coding_required: z.boolean().default(false),
     is_technical_required: z.boolean().default(false),
+    assessment_duration: z.coerce.number().min(5, "Minimum 5 minutes").max(180, "Maximum 3 hours").default(15),
 
     technical_questions: z.array(z.object({
         question: z.string().min(5),
@@ -101,6 +102,7 @@ export default function CreateJobPage() {
             is_english_required: false,
             is_coding_required: false,
             is_technical_required: false,
+            assessment_duration: 15,
             technical_questions: [],
             requirements: ''
         }
@@ -134,7 +136,9 @@ export default function CreateJobPage() {
                 salary_max: existingJob.salary_max || 0,
                 responsibilities: existingJob.responsibilities || [],
                 skills: existingJob.skills || [],
-                technical_questions: existingJob.technical_questions || []
+                skills: existingJob.skills || [],
+                technical_questions: existingJob.technical_questions || [],
+                assessment_duration: existingJob.assessment_duration || 15
             })
         }
     }, [existingJob, form])
@@ -543,6 +547,25 @@ export default function CreateJobPage() {
                                                         <Switch checked={field.value} onCheckedChange={field.onChange} />
                                                     )} />
                                                 </div>
+
+                                                {/* Assessment Duration */}
+                                                {form.watch('is_technical_required') && (
+                                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-purple-50 border-purple-100">
+                                                        <div>
+                                                            <h4 className="font-medium text-purple-900">Assessment Duration (Minutes)</h4>
+                                                            <p className="text-sm text-purple-700">Set the time limit for the technical assessment.</p>
+                                                        </div>
+                                                        <FormField control={form.control} name="assessment_duration" render={({ field }) => (
+                                                            <Input
+                                                                type="number"
+                                                                {...field}
+                                                                className="w-24 bg-white"
+                                                                min={5}
+                                                                max={180}
+                                                            />
+                                                        )} />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -656,6 +679,6 @@ export default function CreateJobPage() {
                     </Form>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

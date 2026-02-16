@@ -220,6 +220,7 @@ export interface JobRoleInput {
     description: string
     requirements: string
     technical_questions?: TechnicalQuestion[]
+    assessment_duration?: number
 }
 
 export interface JobRoleUpdate {
@@ -228,6 +229,7 @@ export interface JobRoleUpdate {
     description?: string
     requirements?: string
     technical_questions?: TechnicalQuestion[]
+    assessment_duration?: number
     current_version?: number  // For optimistic locking
 }
 
@@ -257,6 +259,7 @@ export interface JobRole {
     is_english_required?: boolean
     is_coding_required?: boolean
     is_technical_required?: boolean
+    assessment_duration?: number
 
     // Relations
     technical_questions?: TechnicalQuestion[];
