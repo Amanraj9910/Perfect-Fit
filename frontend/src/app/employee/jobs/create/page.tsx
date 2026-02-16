@@ -136,7 +136,6 @@ export default function CreateJobPage() {
                 salary_max: existingJob.salary_max || 0,
                 responsibilities: existingJob.responsibilities || [],
                 skills: existingJob.skills || [],
-                skills: existingJob.skills || [],
                 technical_questions: existingJob.technical_questions || [],
                 assessment_duration: existingJob.assessment_duration || 15
             })

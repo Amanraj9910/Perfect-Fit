@@ -128,7 +128,7 @@ export default function CandidateDashboard() {
                                                 className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/10 hover:shadow-green-900/20 transition-all"
                                                 onClick={handleStartAssessment}
                                             >
-                                                Start Assessment <ExternalLink className="h-4 w-4" />
+                                                English Assessment <ExternalLink className="h-4 w-4" />
                                             </Button>
 
                                             {app.technical_assessment_completed && (

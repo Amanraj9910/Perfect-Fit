@@ -65,7 +65,7 @@ export default function TechnicalAssessmentPage() {
         if (!started || completed || isDisqualified || timeLeft === null) return
 
         if (timeLeft <= 0) {
-            handleSubmit()
+            handleSubmit(true)
             return
         }
 
@@ -130,11 +130,23 @@ export default function TechnicalAssessmentPage() {
         }))
     }
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (force = false) => {
         if (!job?.technical_questions) return
         if (!application) {
             toast.error("Application ID missing")
             return
+        }
+
+        if (!force) {
+            // Validate all questions answered only if not forced
+            const allAnswered = job.technical_questions.every((_: TechnicalQuestion, idx: number) =>
+                answers[idx] && answers[idx].trim().length > 0
+            )
+
+            if (!allAnswered) {
+                toast.error("Please answer all questions before submitting")
+                return
+            }
         }
 
         setSubmitting(true)
@@ -142,11 +154,8 @@ export default function TechnicalAssessmentPage() {
         try {
             const formattedAnswers = job.technical_questions.map((q: TechnicalQuestion, idx: number) => ({
                 question_id: q.id!,
-                answer: answers[idx] || "No Answer Provided"
+                answer: answers[idx] || (force ? "No Answer Provided (Time Expired)" : "No Answer Provided")
             }))
-
-            // Check if any answer is empty (optional based on timer expiry)
-            // If timer expired, we submit whatever we have.
 
             await assessmentApi.submitTechnical(application.id, formattedAnswers as any)
 
@@ -333,7 +342,7 @@ export default function TechnicalAssessmentPage() {
                         </Button>
 
                         {isLastQuestion ? (
-                            <Button onClick={handleSubmit} disabled={submitting} className="bg-purple-600 hover:bg-purple-700">
+                            <Button onClick={() => handleSubmit(false)} disabled={submitting} className="bg-purple-600 hover:bg-purple-700">
                                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                                 Submit Assessment
                             </Button>
