@@ -1,7 +1,7 @@
 {
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     "manifestVersion": "1.16",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "id": "5e8b5d3a-1234-4567-89ab-cdef01234567",
     "packageName": "com.perfectfit.portal",
     "developer": {
@@ -37,6 +37,9 @@
     "validDomains": [
         "perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net",
         "*.supabase.co",
-        "perfect-fit-backend.happycliff-86d2d4a7.centralindia.azurecontainerapps.io"
+        "perfect-fit-backend.happycliff-86d2d4a7.centralindia.azurecontainerapps.io",
+        "accounts.google.com",
+        "accounts.google.co.in",
+        "login.microsoftonline.com"
     ]
 }

@@ -17,10 +17,27 @@ export async function GET(request: NextRequest) {
                         return request.cookies.get(name)?.value
                     },
                     set(name: string, value: string, options: CookieOptions) {
-                        cookieStore.set(name, { value, options })
+                        // Force SameSite=None and Secure for Teams iframe compatibility
+                        // allow overwriting via options but default to safe for iframe
+                        cookieStore.set(name, {
+                            value,
+                            options: {
+                                ...options,
+                                sameSite: 'none',
+                                secure: true
+                            }
+                        })
                     },
                     remove(name: string, options: CookieOptions) {
-                        cookieStore.set(name, { value: '', options: { ...options, maxAge: 0 } })
+                        cookieStore.set(name, {
+                            value: '',
+                            options: {
+                                ...options,
+                                maxAge: 0,
+                                sameSite: 'none',
+                                secure: true
+                            }
+                        })
                     },
                 },
             }

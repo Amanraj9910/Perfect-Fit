@@ -44,8 +44,10 @@ export default function AuthPage() {
 
     useEffect(() => {
         // Redirect if already logged in
-        if (!authLoading && user && profile) {
-            const role = profile.role || 'candidate';
+        if (!authLoading && user) {
+            // Default to 'candidate' if profile isn't loaded yet to prevent getting stuck
+            // The dashboard/protected routes will handle role checks/redirection if needed
+            const role = profile?.role || 'candidate';
             if (['admin', 'hr', 'recruiter'].includes(role)) {
                 router.push('/admin');
             } else if (role === 'employee') {
