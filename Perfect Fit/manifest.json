@@ -1,0 +1,42 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.16",
+    "version": "1.0.0",
+    "id": "5e8b5d3a-1234-4567-89ab-cdef01234567",
+    "packageName": "com.perfectfit.portal",
+    "developer": {
+        "name": "Aman Raj",
+        "websiteUrl": "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net",
+        "privacyUrl": "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net/privacy",
+        "termsOfUseUrl": "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net/terms"
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "name": {
+        "short": "Perfect Fit Portal",
+        "full": "Perfect Fit Candidate & Employee Portal"
+    },
+    "description": {
+        "short": "Portal for candidates and employees to manage assessments and jobs.",
+        "full": "The Perfect Fit Portal allows candidates to take assessments, view AI scorecards, and recruiters to manage job postings and candidates."
+    },
+    "accentColor": "#FFFFFF",
+    "staticTabs": [
+        {
+            "entityId": "dashboard",
+            "name": "Dashboard",
+            "contentUrl": "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net/dashboard",
+            "websiteUrl": "https://perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net/dashboard",
+            "scopes": [
+                "personal"
+            ]
+        }
+    ],
+    "validDomains": [
+        "perfect-fit-crecc9byamcjcsar.centralindia-01.azurewebsites.net",
+        "*.supabase.co",
+        "perfect-fit-backend.happycliff-86d2d4a7.centralindia.azurecontainerapps.io"
+    ]
+}

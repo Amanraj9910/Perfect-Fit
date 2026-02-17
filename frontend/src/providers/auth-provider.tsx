@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Session, AuthError } from '@supabase/supabase-js'
+import { User, Session, AuthError, AuthChangeEvent } from '@supabase/supabase-js'
 import { createClient, getSupabaseClient } from '@/lib/supabase'
 import { toast } from "sonner"
 
@@ -21,7 +21,7 @@ interface AuthContextType {
     profile: Profile | null
     session: Session | null
     loading: boolean
-    profileLoaded: boolean  // New: indicates profile fetch attempt completed
+    profileLoaded: boolean
     isAdmin: boolean
     signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null; profile?: Profile | null }>
     signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: AuthError | null }>
@@ -33,8 +33,102 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Create client once at module level using singleton
 const supabase = getSupabaseClient()
+
+// --- Robust Auth Utilities ---
+
+// Error Types
+type AuthErrorType = 'NETWORK_TIMEOUT' | 'NETWORK_ERROR' | 'INVALID_SESSION' | 'INVALID_TOKEN' | 'SERVER_ERROR' | 'UNKNOWN_ERROR';
+
+class AppAuthError extends Error {
+    type: AuthErrorType;
+    originalError?: any;
+
+    constructor(type: AuthErrorType, message: string, originalError?: any) {
+        super(message);
+        this.type = type;
+        this.originalError = originalError;
+        this.name = 'AppAuthError';
+    }
+}
+
+// Helper to categorize errors
+function classifyError(error: any): AppAuthError {
+    const message = error?.message?.toLowerCase() || '';
+
+    // Explicit session issues
+    if (message.includes('session missing') ||
+        message.includes('refresh_token_not_found') ||
+        message.includes('invalid_grant')) {
+        return new AppAuthError('INVALID_SESSION', 'Session invalid or expired', error);
+    }
+
+    // Network issues
+    if (message.includes('network') ||
+        message.includes('fetch') ||
+        message.includes('timeout') ||
+        message.includes('offline') ||
+        error?.status === 0 || // standard fetch network error status
+        (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        return new AppAuthError('NETWORK_ERROR', 'Network connection issue', error);
+    }
+
+    if (error?.status >= 500) {
+        return new AppAuthError('SERVER_ERROR', 'Server error occurred', error);
+    }
+
+    return new AppAuthError('UNKNOWN_ERROR', error?.message || 'Unknown authentication error', error);
+}
+
+// Exponential Backoff Retry Utility
+async function authenticateWithRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries = 3
+): Promise<T> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            // Check online status first if possible
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                throw new Error('Offline');
+            }
+
+            // Exponential timeout: 5s, 10s, 20s... max 30s
+            const timeoutDuration = Math.min(5000 * Math.pow(2, attempt), 30000);
+
+            // Create a timeout promise
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Operation timed out')), timeoutDuration)
+            );
+
+            // Race the operation against the timeout
+            return await Promise.race([operation(), timeoutPromise]);
+
+        } catch (error: any) {
+            const classifiedError = classifyError(error);
+            const isLastAttempt = attempt === maxRetries - 1;
+
+            // Log the retry attempt
+            console.warn(`[Auth] Attempt ${attempt + 1} failed: ${classifiedError.type} - ${classifiedError.message}`);
+
+            // If it's a critical auth failure, don't retry, fail immediately
+            if (classifiedError.type === 'INVALID_SESSION' || classifiedError.type === 'INVALID_TOKEN') {
+                throw classifiedError;
+            }
+
+            // If it's a network/timeout error and we have retries left, wait and retry
+            if ((classifiedError.type === 'NETWORK_ERROR' || classifiedError.type === 'NETWORK_TIMEOUT' || classifiedError.type === 'SERVER_ERROR')
+                && !isLastAttempt) {
+                const backoffDelay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s...
+                await new Promise(resolve => setTimeout(resolve, backoffDelay));
+                continue;
+            }
+
+            // If no retries left or unknown error, throw
+            throw classifiedError;
+        }
+    }
+    throw new AppAuthError('UNKNOWN_ERROR', 'Max retries exceeded');
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
@@ -42,15 +136,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [session, setSession] = useState<Session | null>(null)
     const [loading, setLoading] = useState(true)
     const [profileLoaded, setProfileLoaded] = useState(false)
-    const router = useRouter()
 
-    // Ref to track if we're in the middle of a login - prevents onAuthStateChange interference
+    // Track last verification time for resume handling
+    const lastVerificationTime = useRef<number>(Date.now());
     const loginInProgressRef = useRef(false)
+    const mountedRef = useRef(true);
 
+    // Fetch profile with better error handling (doesn't throw, returns null on error)
     async function fetchProfile(userId: string): Promise<Profile | null> {
-        // NOTE: Caller must ensure profileLoaded is set appropriately
         console.log('[Auth] fetchProfile started for user:', userId)
         try {
+            // We use key 'id' to find the profile
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, email, full_name, avatar_url, role')
@@ -61,7 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.error('[Auth] Error fetching profile:', error)
                 return null
             }
-            console.log('[Auth] Profile fetched successfully:', data?.full_name)
             return data as Profile
         } catch (err: any) {
             console.error('[Auth] Exception in fetchProfile:', err)
@@ -76,186 +171,192 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    useEffect(() => {
-        let isMounted = true;
+    // Core verification logic
+    const verifySession = useCallback(async (isInitialLoad = false) => {
+        if (!mountedRef.current) return;
 
-        // Get initial session and user securely
-        const initAuth = async () => {
-            console.log('[Auth] initAuth starting...')
-
-            // Timeout promise to prevent infinite loading
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Auth initialization timed out')), 5000)
-            )
-
-            try {
-                // Race between the actual auth logic and the timeout
-                await Promise.race([
-                    (async () => {
-                        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-                        if (sessionError) throw sessionError;
-
-                        if (!isMounted) return;
-                        setSession(session)
-
-                        // Use getUser() to get the user object securely to avoid warning
-                        const { data: { user }, error: userError } = await supabase.auth.getUser()
-                        if (userError) throw userError;
-
-                        if (!isMounted) return;
-                        console.log('[Auth] initAuth got user:', user?.id)
-                        setUser(user)
-
-                        if (user) {
-                            try {
-                                const profileData = await fetchProfile(user.id)
-                                if (!isMounted) return;
-                                setProfile(profileData)
-                                console.log('[Auth] initAuth profile set:', profileData?.full_name)
-                            } catch (err: any) {
-                                console.error('[Auth] Profile fetch failed in initAuth:', err)
-                                // If profile fetch fails, we might still want to let them be "logged in" 
-                                // but without a profile, OR force logout. 
-                                // For now, we'll keep them logged in but log the error.
-                            }
-                        }
-                    })(),
-                    timeoutPromise
-                ])
-            } catch (e: any) {
-                if (!isMounted) return;
-                console.error('[Auth] Auth initialization failed or timed out:', e)
-
-                // CRITICAL: If initialization fails (especially due to timeout), 
-                // we must assume the state is invalid and clear everything.
-                // This fixes the issue where old/bad cookies cause a hang.
-                console.log('[Auth] Forcing sign out due to initialization failure')
-
-                // Clear state immediately
-                setSession(null)
-                setUser(null)
-                setProfile(null)
-
-                // Force Supabase to clear its storage/cookies
-                // We use catch() here to ensure we don't break the finally block if this throws
-                await supabase.auth.signOut().catch((err: any) =>
-                    console.warn('[Auth] Error clearing supabase session:', err)
-                )
-
-                toast.error("Session expired or invalid. Please log in again.")
-            } finally {
-                // CRITICAL: Always set both loading and profileLoaded in finally
-                // This ensures UI is never stuck in loading state
-                if (isMounted) {
-                    setProfileLoaded(true)
-                    setLoading(false)
-                    console.log('[Auth] initAuth complete - loading=false, profileLoaded=true')
-                }
-            }
-        }
-
-        initAuth()
-
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event: string, newSession: Session | null) => {
-                // Skip if login is in progress - let signInWithEmail handle it
-                if (loginInProgressRef.current) {
-                    console.log('[Auth] Skipping onAuthStateChange during login')
-                    return
-                }
-
-                if (!isMounted) return;
-
-                console.log('[Auth] onAuthStateChange:', _event)
-
-                try {
-                    setSession(newSession)
-
-                    if (newSession) {
-                        const { data: { user } } = await supabase.auth.getUser()
-                        if (!isMounted) return;
-                        setUser(user)
-                        if (user) {
-                            try {
-                                const profileData = await fetchProfile(user.id)
-                                if (!isMounted) return;
-                                setProfile(profileData)
-                            } catch (err: any) {
-                                console.error('[Auth] Profile fetch failed in auth change:', err)
-                            }
-                        } else {
-                            if (!isMounted) return;
-                            setProfile(null)
-                        }
-                    } else {
-                        setUser(null)
-                        setProfile(null)
-                        setProfileLoaded(true)
-                    }
-                } catch (e: any) {
-                    console.error('[Auth] Auth change handler failed:', e)
-                } finally {
-                    // Only update loading states if they haven't been set yet
-                    // This prevents navbar flicker on subsequent auth events
-                    if (isMounted) {
-                        setProfileLoaded(true)
-                        setLoading(false)
-                    }
-                }
-            }
-        )
-
-        return () => {
-            isMounted = false;
-            subscription.unsubscribe()
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-
-    const signInWithEmail = async (email: string, password: string): Promise<{ error: AuthError | null; profile?: Profile | null }> => {
-        // NOTE: Don't set loading=true here — it causes navbar to show skeleton during login
-        // The calling code already manages its own loading state
-        loginInProgressRef.current = true // Prevent onAuthStateChange from interfering
+        console.log(`[Auth] verifySession (initial=${isInitialLoad}) starting...`);
+        lastVerificationTime.current = Date.now();
 
         try {
+            // 1. First, check strictly local session (fastest)
+            // This allows offline usage if the token hasn't expired
+            const { data: { session: localSession }, error: localError } = await supabase.auth.getSession();
+
+            if (localError) throw localError;
+
+            // If we have a local session, optimistically set it to unblock UI
+            if (localSession && isInitialLoad && mountedRef.current) {
+                console.log('[Auth] Optimistic local session found');
+                setSession(localSession);
+                setUser(localSession.user);
+                // We don't set loading=false here yet, we wait for profile or validation
+            }
+
+            // 2. Perform robust server-side verification using getUser() with retry
+            // This ensures the token is actually still valid on the server (revocation check)
+            const { data: { user: verifiedUser }, error: verifyError } = await authenticateWithRetry(async () => {
+                return await supabase.auth.getUser();
+            });
+
+            if (verifyError) throw verifyError;
+
+            if (!mountedRef.current) return;
+
+            // 3. User is valid and verified
+            setUser(verifiedUser);
+
+            // 4. Fetch Profile
+            if (verifiedUser) {
+                try {
+                    // We don't need strict retry blocking for profile, can be best-effort
+                    // or simple retry
+                    const profileData = await fetchProfile(verifiedUser.id);
+                    if (mountedRef.current) {
+                        setProfile(profileData);
+                    }
+                } catch (pError) {
+                    console.error('[Auth] Profile fetch failed (non-critical):', pError);
+                    // Don't logout on profile fail, just show basic user
+                }
+            }
+
+        } catch (error: any) {
+            if (!mountedRef.current) return;
+
+            const classified = classifyError(error);
+            console.warn('[Auth] Verification failed:', classified);
+
+            if (classified.type === 'INVALID_SESSION' || classified.type === 'INVALID_TOKEN') {
+                // Critical auth error -> Must logout
+                console.log('[Auth] Critical auth error, clearing session.');
+                setSession(null);
+                setUser(null);
+                setProfile(null);
+                // Clean up any stale data
+                await supabase.auth.signOut().catch(() => { });
+                if (!isInitialLoad) toast.error("Session expired. Please log in again.");
+            } else if (classified.type === 'NETWORK_ERROR' || classified.type === 'NETWORK_TIMEOUT') {
+                // Transient error -> Graceful degradation
+                console.log('[Auth] Network error during verification. Keeping existing state if validation failed.');
+                // If we are offline and have a local session (optimistically set above), 
+                // we KEEP it and allow the user to proceed (Offline Mode)
+                if (isInitialLoad && !session) {
+                    // Initial load failed network check.
+                    // If we successfully grabbed a local session earlier, we are technically "logged in offline"
+                    // If supabase.auth.getSession() returned null, we are logged out.
+                }
+                if (!isInitialLoad) {
+                    toast.warning("Network connection unstable. Some features may be offline.");
+                }
+            } else {
+                // Unknown error
+                console.error('[Auth] Unexpected error:', error);
+            }
+        } finally {
+            if (mountedRef.current) {
+                setLoading(false);
+                setProfileLoaded(true);
+            }
+        }
+    }, [session]);
+
+    // Initial Load & Listeners
+    useEffect(() => {
+        mountedRef.current = true;
+
+        // Initial verify
+        verifySession(true);
+
+        // Visibility Change Handler (for App Resume)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                const now = Date.now();
+                // Only re-verify if > 10 minutes passed since last check
+                // optimization to avoid spamming calls on quick tab switches
+                if (now - lastVerificationTime.current > 10 * 60 * 1000) {
+                    console.log('[Auth] App resumed after delay, re-verifying session...');
+                    verifySession(false);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Supabase Auth State Change Listener
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event: AuthChangeEvent, newSession: Session | null) => {
+                if (!mountedRef.current) return;
+
+                // Skip if manual login is driving state
+                if (loginInProgressRef.current) return;
+
+                console.log(`[Auth] onAuthStateChange: ${event}`);
+
+                if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                    setSession(newSession);
+                    setUser(newSession?.user ?? null);
+                    // Trigger profile fetch if user changed
+                    if (newSession?.user) {
+                        // Debounce/check if profile already matches to avoid redundant fetches?
+                        // For now simple is better:
+                        refreshProfile();
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    setSession(null);
+                    setUser(null);
+                    setProfile(null);
+                }
+
+                setLoading(false);
+                setProfileLoaded(true);
+            }
+        );
+
+        return () => {
+            mountedRef.current = false;
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            subscription.unsubscribe();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Empty dependency array ok, verifySession is stable
+
+    const signInWithEmail = async (email: string, password: string): Promise<{ error: AuthError | null; profile?: Profile | null }> => {
+        loginInProgressRef.current = true;
+
+        try {
+            // Using existing client method - retry logic could be added here if essential, 
+            // but usually user can just click "Login" again for explicit actions.
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password
-            })
-            if (data.session) {
-                setSession(data.session)
-                setUser(data.session.user)
+            });
 
-                // Fetch profile and set it
-                let fetchedProfile: Profile | null = null
-                try {
-                    fetchedProfile = await fetchProfile(data.session.user.id);
-                    setProfile(fetchedProfile);
-                } catch (profileError) {
-                    console.error("Profile fetch failed during login:", profileError);
-                }
-
-                toast.success("Signed in successfully")
-                return { error: null, profile: fetchedProfile }
-            } else if (error) {
-                toast.error(error.message)
-                return { error }
+            if (error) {
+                toast.error(error.message);
+                return { error };
             }
-            return { error: null }
+
+            if (data.session) {
+                setSession(data.session);
+                setUser(data.session.user);
+
+                const profileData = await fetchProfile(data.session.user.id);
+                setProfile(profileData);
+
+                toast.success("Signed in successfully");
+                return { error: null, profile: profileData };
+            }
+
+            return { error: null };
         } catch (err: any) {
-            console.error("Unexpected error during sign in:", err)
-            toast.error("An unexpected error occurred")
-            return { error: err }
+            console.error("Sign in error:", err);
+            toast.error("An unexpected error occurred during sign in");
+            return { error: err };
         } finally {
-            // CRITICAL: Always ensure profileLoaded is true and loading is false
-            setProfileLoaded(true)
-            setLoading(false)
-            // Small delay before re-enabling onAuthStateChange to prevent
-            // the SIGNED_IN event from re-triggering a fetch cycle
-            setTimeout(() => {
-                loginInProgressRef.current = false
-            }, 100)
+            loginInProgressRef.current = false;
+            setLoading(false);
+            setProfileLoaded(true);
         }
     }
 
@@ -270,7 +371,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         })
-        // Note: For signup, usually email verification is needed, so minimal state update
         if (error) {
             setLoading(false)
             toast.error(error.message)
@@ -307,7 +407,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 scopes: 'email openid profile offline_access',
                 redirectTo: `${window.location.origin}/auth/callback`,
                 queryParams: {
-                    prompt: 'login' // Forces re-authentication to allow account selection
+                    prompt: 'login'
                 }
             }
         })
@@ -318,31 +418,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { data, error }
     }
 
-    // Use useCallback to prevent stale closure issues
     const signOut = useCallback(async () => {
-        console.log('[Auth] signOut called')
+        console.log('[Auth] signOut called');
 
-        // ALWAYS clear local state first, regardless of API success
-        // This ensures UI updates even if session was already expired
+        // Optimistic clear
         setUser(null)
         setProfile(null)
         setSession(null)
         setProfileLoaded(true)
 
         try {
-            // Attempt Supabase sign out
-            const { error } = await supabase.auth.signOut()
-            if (error) {
-                console.warn('[Auth] signOut API warning (may be already signed out):', error.message)
-            }
+            await supabase.auth.signOut()
         } catch (error) {
-            console.error('[Auth] Error during signOut API call:', error)
+            console.error('[Auth] Error during signOut:', error)
         } finally {
-            // CRITICAL: Manually clear Supabase tokens from localStorage
-            // This prevents "resurrection" of the session if the API call fails or if the client
-            // holds onto the token in storage despite the signOut call.
+            // Force clean local storage just to be safe
             if (typeof window !== 'undefined') {
-                console.log('[Auth] Manually clearing localStorage items')
                 const keysToRemove = []
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i)
