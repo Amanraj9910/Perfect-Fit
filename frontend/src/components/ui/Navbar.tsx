@@ -47,7 +47,7 @@ export function Navbar() {
                     className="flex items-center gap-2 font-bold text-xl text-primary transition-colors hover:text-primary/90"
                 >
                     <Target className="h-6 w-6" />
-                    <span>Perfect Fit</span>
+                    <span>iScreen</span>
                 </Link>
 
                 {/* Desktop Nav */}

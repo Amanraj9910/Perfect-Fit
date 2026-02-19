@@ -140,7 +140,7 @@ export default function AuthPage() {
             <div className="hidden lg:flex flex-col justify-between bg-zinc-900 p-12 text-zinc-100">
                 <div className="flex items-center gap-2 font-bold text-xl">
                     <Target className="h-6 w-6" />
-                    <span>Perfect Fit</span>
+                    <span>iScreen</span>
                 </div>
 
                 <div className="space-y-8 max-w-md">

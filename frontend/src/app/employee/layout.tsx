@@ -58,7 +58,7 @@ export default function EmployeeLayout({
                 <div className="p-6 border-b">
                     <div className="flex items-center gap-2">
                         <Briefcase className="h-6 w-6 text-primary" />
-                        <span className="font-bold text-lg">Perfect Fit</span>
+                        <span className="font-bold text-lg">iScreen</span>
                     </div>
                 </div>
 
@@ -73,8 +73,8 @@ export default function EmployeeLayout({
                                 href={item.href}
                             >
                                 <div className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium ${isActive
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:bg-muted"
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted"
                                     }`}>
                                     <Icon className="h-4 w-4" />
                                     {item.name}
